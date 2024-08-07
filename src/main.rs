@@ -44,6 +44,7 @@ async fn try_link(id: &str, tx_testing: &flume::Sender<String>, client: &reqwest
                 return;
             }
             429 => {
+                tx_testing.send("rate".to_string()).unwrap(); // Rate limited
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await; // Rate limited, wait 1 second
             }
             _ => {
@@ -56,8 +57,6 @@ async fn try_link(id: &str, tx_testing: &flume::Sender<String>, client: &reqwest
 
 #[tokio::main]
 async fn main() {
-    let (tx_discovery, rx_discovery) = flume::unbounded();
-
     let args: Vec<String> = env::args().collect();
 
     let starting_id = if args.len() >= 2 {
@@ -69,12 +68,20 @@ async fn main() {
     let testing_threads = if args.len() >= 3 {
         args[2].parse::<usize>().unwrap()
     } else {
-        5
+        125
     };
 
+    let discovery_bound = if args.len() >= 4 {
+        args[3].parse::<usize>().unwrap()
+    } else {
+        10000000
+    };
+
+    let (tx_discovery, rx_discovery) = flume::bounded(discovery_bound);
+
     println!(
-        "[0s] Starting with ID {}, using {} threads",
-        starting_id, testing_threads
+        "[0s] Starting with ID {}, using {} threads with a bound of {}",
+        starting_id, testing_threads, discovery_bound
     );
 
     tokio::spawn(async move {
@@ -113,6 +120,7 @@ async fn main() {
     let start = std::time::Instant::now();
     let mut last_update = start;
     let mut total_count = 0;
+    let mut total_ratelimit_count = 0;
 
     loop {
         match rx_testing.recv_async().await {
@@ -120,7 +128,9 @@ async fn main() {
                 total_count += 1; // Got a result
                 let elapsed = start.elapsed().as_secs();
 
-                if id != "" {
+                if id == "rate" {
+                    total_ratelimit_count += 1;
+                } else if id != "" {
                     // Yoo we got one!
                     println!("[{}s] VALID ID: {}", elapsed, id);
                 }
@@ -129,7 +139,10 @@ async fn main() {
 
                 if elapsed_since_last_update > 0 && elapsed_since_last_update % 5 == 0 {
                     // So we know something is happening lol
-                    println!("[{}s] Total count: {}", elapsed, total_count);
+                    println!(
+                        "[{}s] Total count: {}, Rate limited count: {}, Permutations awaiting testing: {}",
+                        elapsed, total_count, total_ratelimit_count, rx_discovery.len()
+                    );
 
                     last_update = std::time::Instant::now();
                 }

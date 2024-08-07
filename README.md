@@ -3,8 +3,9 @@
 - [Bruty](#bruty)
   - [Running (building from source)](#running-building-from-source)
   - [Usage](#usage)
+    - [Notes](#notes)
 
-Brute forces the rest of a YouTube link when you have *part* of it, but not the full link. It successfully obtained [**`TlTxAwYypvsas`**](https://youtube.com/watch?v=TlTxAwYypvsas) a valid YT vid link from **`TlTxAwYy`** in *232s*.
+Brute forces the rest of a YouTube link when you have *part* of it, but not the full link. It successfully obtained [**`TlTxAwYypvsas`**](https://youtube.com/watch?v=TlTxAwYypvsas) a valid YT vid link from **`TlTxAwYy`** in *17s*.
 
 ## Running (building from source)
 
@@ -16,7 +17,15 @@ Brute forces the rest of a YouTube link when you have *part* of it, but not the 
 
 ## Usage
 
-| Argument | Description                                           | Default  |
-| -------- | ----------------------------------------------------- | -------- |
-| 1        | The target YouTube **ID** to start permutations from. | `3qw99S` |
-| 2        | The number of **threads** to use.                     | `5`      |
+> [!NOTE]
+> You have to do them in order, I'm not spending more time to add proper argparsing lol.
+
+| Argument | Description                                                                                            | Default    |
+| -------- | ------------------------------------------------------------------------------------------------------ | ---------- |
+| 1        | The target YouTube **ID** to start permutations from.                                                  | `3qw99S`   |
+| 2        | The number of **threads** to use.                                                                      | `100`      |
+| 3        | Bound for permutations channel before blocking more until a thread is free. Prevents resource hogging. | `10000000` |
+
+### Notes
+
+* A `String` is always 24 bytes (according to [this code](https://dhghomon.github.io/easy_rust/Chapter_14.html#:~:text=A%20String%20is%20always%2024%20bytes), which yes I did run to test). 24 bytes * 10000000 = 240000000 bytes which is 240 MB. This is the maximum amount of memory that can be used to store permutations that are awaiting checking. 2.4GB seemed too much (although it would be fine on most, including my, system).
