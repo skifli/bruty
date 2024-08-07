@@ -68,7 +68,7 @@ async fn main() {
     let testing_threads = if args.len() >= 3 {
         args[2].parse::<usize>().unwrap()
     } else {
-        125
+        100
     };
 
     let discovery_bound = if args.len() >= 4 {
