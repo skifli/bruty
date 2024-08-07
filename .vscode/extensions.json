@@ -1,0 +1,13 @@
+{
+    "recommendations": [
+        "alexanderte.dainty-one-dark-pro-vscode",
+        "bierner.markdown-preview-github-styles",
+        "gruntfuggly.todo-tree",
+        "pkief.material-icon-theme",
+        "rust-lang.rust-analyzer",
+        "streetsidesoftware.code-spell-checker",
+        "streetsidesoftware.code-spell-checker-british-english",
+        "wakatime.vscode-wakatime",
+        "yzhang.markdown-all-in-one",
+    ]
+}
