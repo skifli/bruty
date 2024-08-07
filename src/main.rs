@@ -62,7 +62,7 @@ async fn main() {
     let starting_id = if args.len() >= 2 {
         args[1].clone()
     } else {
-        "3qw99S".to_string()
+        "3qw99S3".to_string()
     };
 
     let testing_threads = if args.len() >= 3 {
