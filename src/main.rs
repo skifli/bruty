@@ -153,13 +153,13 @@ async fn main() {
         }
     }
 
+    for task in tasks {
+        task.await.unwrap(); // Wait for all workers to finish
+    }
+
     println!(
         "[{}s] FIN count: {}",
         start.elapsed().as_secs(),
         total_count
     );
-
-    for task in tasks {
-        task.await.unwrap(); // Wait for all workers to finish
-    }
 }
