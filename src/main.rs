@@ -63,7 +63,7 @@ async fn main() {
     let starting_id = if args.len() == 2 {
         args[1].clone()
     } else {
-        "TlTxAwYy".to_string()
+        "3qw99S".to_string()
     };
 
     println!("[0s] Starting with ID: {}", starting_id);
