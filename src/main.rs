@@ -60,13 +60,22 @@ async fn main() {
 
     let args: Vec<String> = env::args().collect();
 
-    let starting_id = if args.len() == 2 {
+    let starting_id = if args.len() >= 2 {
         args[1].clone()
     } else {
         "3qw99S".to_string()
     };
 
-    println!("[0s] Starting with ID: {}", starting_id);
+    let testing_threads = if args.len() >= 3 {
+        args[2].parse::<usize>().unwrap()
+    } else {
+        5
+    };
+
+    println!(
+        "[0s] Starting with ID {}, using {} threads",
+        starting_id, testing_threads
+    );
 
     tokio::spawn(async move {
         generate_permutations(starting_id.chars().collect(), &tx_discovery);
@@ -77,7 +86,7 @@ async fn main() {
 
     let mut tasks = vec![];
 
-    for _ in 0..5 {
+    for _ in 0..testing_threads {
         let rx_discovery_clone = rx_discovery.clone(); // Clone the receiver of permutations for each worker
         let tx_testing_clone = tx_testing.clone(); // Clone the sender of test results for each worker
 
