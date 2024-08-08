@@ -1,4 +1,7 @@
-use std::env;
+use log;
+use simplelog;
+use std;
+use tokio;
 
 const VALID_CHARS: &[char] = &[
     'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's',
@@ -55,7 +58,22 @@ async fn try_link(id: &str, tx_testing: &flume::Sender<String>, client: &reqwest
 
 #[tokio::main]
 async fn main() {
-    let args: Vec<String> = env::args().collect();
+    simplelog::CombinedLogger::init(vec![
+        simplelog::TermLogger::new(
+            simplelog::LevelFilter::Info,
+            simplelog::Config::default(),
+            simplelog::TerminalMode::Mixed,
+            simplelog::ColorChoice::Auto,
+        ),
+        simplelog::WriteLogger::new(
+            simplelog::LevelFilter::Info,
+            simplelog::Config::default(),
+            std::fs::File::create("bruty.log").unwrap(),
+        ),
+    ])
+    .unwrap();
+
+    let args: Vec<String> = std::env::args().collect();
 
     let starting_id = if args.len() >= 2 {
         args[1].clone()
@@ -77,9 +95,11 @@ async fn main() {
 
     let (tx_discovery, rx_discovery) = flume::bounded(discovery_bound);
 
-    println!(
-        "[0s] Starting with ID {}, using {} threads with a bound of {}",
-        starting_id, testing_threads, discovery_bound
+    log::info!(
+        "Starting with {}, using {} threads with a bound of {}.",
+        starting_id,
+        testing_threads,
+        discovery_bound
     );
 
     tokio::spawn(async move {
@@ -115,38 +135,42 @@ async fn main() {
 
     drop(tx_testing); // Signal that all permutations have been assigned a worker, and that no more will be sent
 
-    let start = std::time::Instant::now();
-    let mut last_update = start;
     let mut total_count = 0;
     let mut total_ratelimit_count = 0;
+    let mut total_valid_count = 0;
+
+    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(10));
 
     loop {
-        match rx_testing.recv_async().await {
-            Ok(id) => {
+        tokio::select! {
+            _ = interval.tick() => {
+                // This block executes every 10 seconds
+                if rx_testing.is_disconnected() { // All workers are done, so we should have checked all permutations
+                    break; // Exit the loop when all permutations have been tested
+                }
+
+                log::info!(
+                    "Tested: {}, Valid: {}, To Test: {}, Rate Limited: {}.",
+                    total_count,
+                    total_valid_count,
+                    rx_discovery.len(),
+                    total_ratelimit_count
+                );
+            }
+            Ok(id) = rx_testing.recv_async() => {
                 total_count += 1; // Got a result
-                let elapsed = start.elapsed().as_secs();
 
                 if id == "rate" {
                     total_ratelimit_count += 1;
                 } else if id != "" {
                     // Yoo we got one!
-                    println!("[{}s] VALID ID: {}", elapsed, id);
-                }
-
-                let elapsed_since_last_update = last_update.elapsed().as_secs();
-
-                if elapsed_since_last_update > 0 && elapsed_since_last_update % 5 == 0 {
-                    // So we know something is happening lol
-                    println!(
-                        "[{}s] Total count: {}, Rate limited count: {}, Permutations awaiting testing: {}",
-                        elapsed, total_count, total_ratelimit_count, rx_discovery.len()
-                    );
-
-                    last_update = std::time::Instant::now();
+                    total_valid_count += 1;
+                    log::info!("VALID ID: {}.", id);
                 }
             }
-            Err(_) => {
-                break; // Assume all permutations have been tested
+            else => {
+                // Exit the loop when all permutations have been tested
+                break;
             }
         }
     }
@@ -155,9 +179,9 @@ async fn main() {
         task.await.unwrap(); // Wait for all workers to finish
     }
 
-    println!(
-        "[{}s] FIN count: {}",
-        start.elapsed().as_secs(),
-        total_count
+    log::info!(
+        "Finished after testing {} permutations, with {} rate limit(s).",
+        total_count,
+        total_ratelimit_count
     );
 }

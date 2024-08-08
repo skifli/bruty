@@ -5,5 +5,7 @@ edition = "2021"
 
 [dependencies]
 flume = "0.11.0"
+log = { version = "0.4.22", features = ["std"] }
 reqwest = "0.12.5"
+simplelog = { version = "0.12.2", features = ["termcolor"]}
 tokio = { version = "1.39.2", features = ["full"]}
