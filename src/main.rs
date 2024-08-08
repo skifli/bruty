@@ -7,23 +7,21 @@ const VALID_CHARS: &[char] = &[
     '5', '6', '7', '8', '9', '-', '_',
 ];
 
-fn generate_permutations(id: Vec<char>, tx_discovery: &flume::Sender<String>) {
+fn generate_permutations(id: &mut Vec<char>, tx_discovery: &flume::Sender<String>) {
     if id.len() == 10 {
-        let mut new_id = id.clone();
-
         for &chr in VALID_CHARS {
-            new_id.push(chr);
+            id.push(chr); // No need to clone here because it was cloned for us by the recursive call
 
-            tx_discovery.send(new_id.iter().collect()).unwrap();
+            tx_discovery.send(id.iter().collect()).unwrap();
 
-            new_id.pop();
+            id.pop();
         }
     } else {
         for &chr in VALID_CHARS {
             let mut new_id = id.clone();
             new_id.push(chr);
 
-            generate_permutations(new_id, tx_discovery);
+            generate_permutations(&mut new_id, tx_discovery);
         }
     }
 }
@@ -85,7 +83,7 @@ async fn main() {
     );
 
     tokio::spawn(async move {
-        generate_permutations(starting_id.chars().collect(), &tx_discovery);
+        generate_permutations(&mut starting_id.chars().collect(), &tx_discovery);
         drop(tx_discovery) // Signal that all permutations have been generated
     });
 

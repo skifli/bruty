@@ -22,7 +22,7 @@ Brute forces the rest of a YouTube link when you have *part* of it, but not the 
 
 | Argument | Description                                                                                            | Default    |
 | -------- | ------------------------------------------------------------------------------------------------------ | ---------- |
-| 1        | The target YouTube **ID** to start permutations from.                                                  | `3qw99S`   |
+| 1        | The target YouTube **ID** to start permutations from.                                                  | `3qw99S3`  |
 | 2        | The number of **threads** to use.                                                                      | `100`      |
 | 3        | Bound for permutations channel before blocking more until a thread is free. Prevents resource hogging. | `10000000` |
 
