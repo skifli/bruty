@@ -5,7 +5,7 @@
   - [Usage](#usage)
     - [Notes](#notes)
 
-Brute forces the rest of a YouTube link when you have *part* of it, but not the full link. It successfully obtained `3qw99S3e-ak` a valid YT vid link from `3qw99S3` in **272s** (missing 4 chars).
+Brute forces the rest of a YouTube link when you have *part* of it, but not the full link. It successfully obtained `TlTxAwYypvs` a valid YT vid link from `TlTxAwYy` in **21 seconds** (at a total average of 2.9K requests per second).
 
 ## Running (building from source)
 
