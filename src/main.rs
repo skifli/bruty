@@ -1,3 +1,7 @@
+/*
+Code is bad / bugged, going to rewrite it soon. It should do its job, might hang at the end though lol.
+*/
+
 use log;
 use simplelog;
 use std;
@@ -109,11 +113,13 @@ async fn main() {
 
     let (tx_testing, rx_testing) = flume::unbounded();
 
+    let mut tasks = vec![];
+
     for _ in 0..testing_threads {
         let rx_discovery_clone = rx_discovery.clone(); // Clone the receiver of permutations for each worker
         let tx_testing_clone = tx_testing.clone(); // Clone the sender of test results for each worker
 
-        tokio::spawn(async move {
+        tasks.push(tokio::spawn(async move {
             let client = reqwest::Client::new();
 
             loop {
@@ -127,9 +133,11 @@ async fn main() {
                 }
             }
 
-            // Not going to drop the sender here because we need to wait for the results to be processed
-        });
+            drop(tx_testing_clone); // Signal that this worker is done
+        }));
     }
+
+    drop(tx_testing); // Signal that all permutations have been assigned a worker, and that no more will be sent
 
     let mut total_count = 0;
     let mut total_ratelimit_count = 0;
@@ -141,7 +149,7 @@ async fn main() {
         tokio::select! {
             _ = interval.tick() => {
                 // This block executes every 10 seconds
-                if rx_discovery.is_empty() && rx_discovery.is_disconnected() {  // All workers are done, so we should have checked all permutations
+                if rx_testing.is_disconnected() { // All workers are done, so we should have checked all permutations
                     break; // Exit the loop when all permutations have been tested
                 }
 
@@ -166,45 +174,16 @@ async fn main() {
                     log::info!("VALID ID: {}.", id);
                 }
             }
-        }
-    }
-
-    // Okay so what I had before was a list of tasks that was all the threads spawned above in that for loop for
-    // testing the links. However tha code would hang, which I might know why but a fix is hard / this is easier.
-    // My theory is on Line 120 (as of whatever the heck this commit is), when awaiting a message, the channel is
-    // dropped. However since the code is already waiting, for some reason it never gets the message, because it
-    // isn't a message. It's awaiting messages, but the channel has been dropped, but it doesn't know that. It's an
-    // implementation problem, but this is just my guess. It might be something completely different causing this
-    // bug. Either way, I have made the code not wait for those threads to finish here, because it to be honest is
-    // better as a hang prevention method. By the time the code gets here every generated link HAS to have been
-    // checked already as on Line 146 in the above for loop the ONLY way to break is by the channel of permutations
-    // to test being empty, and as a further safeguard all senders of permutations have been dropped (in case we
-    // access the channel at a weird race point inbetween permutations being added and being checked). tx_discovery
-    // is dropped on Line 107 only after the permutations generator function has finished, so we know that it HAS
-    // to have finished generating them all. That way, now we can break knowing everything has been checked. :`).
-
-    if !rx_testing.is_empty() {
-        loop {
-            match rx_testing.recv_async().await {
-                Ok(id) => {
-                    total_count += 1; // Got a result
-
-                    if id == "rate" {
-                        total_ratelimit_count += 1;
-                    } else if id != "" {
-                        // Yoo we got one!
-                        total_valid_count += 1;
-                        log::info!("VALID ID: {}.", id);
-                    }
-                }
-                Err(_) => {
-                    break;
-                }
+            else => {
+                // Exit the loop when all permutations have been tested
+                break;
             }
         }
     }
 
-    // And it worked! Woo-hoo.
+    for task in tasks {
+        task.await.unwrap(); // Wait for all workers to finish
+    }
 
     log::info!(
         "Finished after testing {} permutations, with {} rate limit(s).",
