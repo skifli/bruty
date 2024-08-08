@@ -21,4 +21,4 @@ Cargo.lock
 #.idea/
 
 # Custom
-src/bruty.log
+*bruty.log
