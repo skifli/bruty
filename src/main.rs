@@ -127,11 +127,9 @@ async fn main() {
                 }
             }
 
-            drop(tx_testing_clone); // Signal that this worker is done
+            // Not going to drop the sender here because we need to wait for the results to be processed
         });
     }
-
-    drop(tx_testing); // Drop this one because its not longer needed
 
     let mut total_count = 0;
     let mut total_ratelimit_count = 0;
@@ -144,6 +142,10 @@ async fn main() {
             _ = interval.tick() => {
                 // This block executes every 10 seconds
                 if rx_discovery.is_empty() && rx_discovery.is_disconnected() {  // All workers are done, so we should have checked all permutations
+                    if !rx_testing.is_empty() {
+                        continue; // There are still results to process, so wait for them
+                    }
+
                     break; // Exit the loop when all permutations have been tested
                 }
 
