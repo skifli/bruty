@@ -142,10 +142,6 @@ async fn main() {
             _ = interval.tick() => {
                 // This block executes every 10 seconds
                 if rx_discovery.is_empty() && rx_discovery.is_disconnected() {  // All workers are done, so we should have checked all permutations
-                    if !rx_testing.is_empty() {
-                        continue; // There are still results to process, so wait for them
-                    }
-
                     break; // Exit the loop when all permutations have been tested
                 }
 
@@ -186,6 +182,27 @@ async fn main() {
     // access the channel at a weird race point inbetween permutations being added and being checked). tx_discovery
     // is dropped on Line 107 only after the permutations generator function has finished, so we know that it HAS
     // to have finished generating them all. That way, now we can break knowing everything has been checked. :`).
+
+    if !rx_testing.is_empty() {
+        loop {
+            match rx_testing.recv_async().await {
+                Ok(id) => {
+                    total_count += 1; // Got a result
+
+                    if id == "rate" {
+                        total_ratelimit_count += 1;
+                    } else if id != "" {
+                        // Yoo we got one!
+                        total_valid_count += 1;
+                        log::info!("VALID ID: {}.", id);
+                    }
+                }
+                Err(_) => {
+                    break;
+                }
+            }
+        }
+    }
 
     // And it worked! Woo-hoo.
 
