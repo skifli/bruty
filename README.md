@@ -3,6 +3,9 @@
 - [Bruty](#bruty)
   - [Running (building from source)](#running-building-from-source)
   - [Usage](#usage)
+  - [Notes](#notes)
+  
+![Screenshot of the program working](assets/cover.png)
 
 Brute forces the rest of a YouTube link when you have *part* of it, but not the full link. It successfully obtained `TlTxAwYypvs` a valid YT vid link from `TlTxAwYy` in **21 seconds** (at a total average of 2.9K requests per second).
 
@@ -35,3 +38,7 @@ Options:
   -h, --help                         Print help
   -V, --version                      Print version
 ```
+
+## Notes
+
+* When the program says `x/y checked` it actually means **`x`** permutations have been checked, and **`y`** permutations need to be checked. Not `**y**` permutations in total will be checked. That is why that number will decrease over time.
