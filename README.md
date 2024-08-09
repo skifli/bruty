@@ -41,4 +41,4 @@ Options:
 
 ## Notes
 
-* When the program says `x/y checked` it actually means **`x`** permutations have been checked, and **`y`** permutations need to be checked. Not `**y**` permutations in total will be checked. That is why that number will decrease over time.
+* When the program says `x/y checked` it actually means **`x`** permutations have been checked, and **`y`** permutations need to be checked. Not **`y`** permutations in total will be checked. That is why that number will decrease over time.
