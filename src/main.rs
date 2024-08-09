@@ -1,9 +1,8 @@
-/*
-Code is bad / bugged, going to rewrite it soon. It should do its job, might hang at the end though lol.
-*/
-
-use log;
-use simplelog;
+use chrono;
+use clap::Parser;
+use fern;
+use reqwest;
+use sonic_rs;
 use std;
 use tokio;
 
@@ -14,12 +13,107 @@ const VALID_CHARS: &[char] = &[
     '5', '6', '7', '8', '9', '-', '_',
 ];
 
-fn generate_permutations(id: &mut Vec<char>, tx_discovery: &flume::Sender<String>) {
+#[derive(Parser, Debug)]
+#[command(
+    version,
+    about,
+    author = "Skifli",
+    version = "0.1.0",
+    about = "Brute-forces the rest of a YouTube video ID when you have part of it"
+)]
+struct Args {
+    /// YouTube ID to start brute-forcing from
+    id: String,
+
+    #[arg(short, long, help = "Number of threads to use", default_value_t = 100)]
+    threads: u8,
+
+    #[arg(
+        short,
+        long,
+        help = "Bound for permutations channel before blocking more generation",
+        default_value_t = 10000000
+    )]
+    bound: usize,
+
+    #[arg(
+        short,
+        long,
+        help = "Log file to write to (won't be overwritten)",
+        default_value = "bruty.log"
+    )]
+    log: String,
+
+    #[arg(
+        short,
+        long,
+        help = "How long to wait between info logs (in seconds)",
+        default_value_t = 10
+    )]
+    log_interval: u64,
+}
+
+// Represents a YT video's data
+#[derive(sonic_rs::Deserialize)]
+struct VideoData {
+    title: String,
+    author_name: String,
+    author_url: String,
+}
+
+#[derive(PartialEq)]
+// Represents an event that can occur during the testing process
+enum MessageEvent {
+    Success,       // Found in the embed API
+    NotEmbeddable, // Not found in the embed API, but still exists
+    NotFound,      // Not found in any API
+    RateLimited,   // Rate limited by the API
+}
+
+// Represents a message sent from a tester to the main thread
+struct Message {
+    event: MessageEvent,
+    id: Box<str>,                  // ID that was tested
+    video_data: Option<VideoData>, // Only present if Event is Success
+}
+
+fn setup_logger(log_file: String) -> Result<(), fern::InitError> {
+    // configure fern::colors::Colors for the whole line
+    let level_colors = fern::colors::ColoredLevelConfig::new()
+        .error(fern::colors::Color::Red)
+        .warn(fern::colors::Color::Yellow)
+        .info(fern::colors::Color::Blue)
+        .debug(fern::colors::Color::Magenta)
+        .trace(fern::colors::Color::White);
+
+    fern::Dispatch::new()
+        .format(move |out, message, record| {
+            out.finish(format_args!(
+                "{} \x1B[{}m{}\x1B[0m {}", // \x1B[0m resets the color
+                chrono::DateTime::<chrono::Local>::from(std::time::SystemTime::now())
+                    .format("%H:%M:%S"), // Format time nicely
+                level_colors.get_color(&record.level()).to_fg_str(), // Set color based on log level
+                format!("{:<5}", record.level()), // Pad log level to 5 characters (length of longest log level)
+                message
+            ))
+        })
+        .level(log::LevelFilter::Debug)
+        .chain(std::io::stdout())
+        .chain(fern::log_file(log_file)?)
+        .level_for("reqwest", log::LevelFilter::Warn)
+        .apply()?;
+
+    Ok(())
+}
+
+fn generate_permutations(id: &mut Vec<char>, generator_sender: &flume::Sender<Box<str>>) {
     if id.len() == 10 {
         for &chr in VALID_CHARS {
             id.push(chr); // No need to clone here because it was cloned for us by the recursive call
 
-            tx_discovery.send(id.iter().collect()).unwrap();
+            generator_sender
+                .send(id.iter().collect::<String>().into_boxed_str())
+                .unwrap();
 
             id.pop();
         }
@@ -28,14 +122,14 @@ fn generate_permutations(id: &mut Vec<char>, tx_discovery: &flume::Sender<String
             let mut new_id = id.clone();
             new_id.push(chr);
 
-            generate_permutations(&mut new_id, tx_discovery);
+            generate_permutations(&mut new_id, generator_sender);
         }
     }
 }
 
-async fn try_link(id: &str, tx_testing: &flume::Sender<String>, client: &reqwest::Client) {
+async fn try_link(client: &reqwest::Client, id: &str, testing_sender: &flume::Sender<Message>) {
     loop {
-        let resp = client
+        let response = client
             .get(
                 "https://www.youtube.com/oembed?url=http://www.youtube.com/watch?v=".to_string()
                     + id,
@@ -43,151 +137,264 @@ async fn try_link(id: &str, tx_testing: &flume::Sender<String>, client: &reqwest
             .send()
             .await;
 
-        match resp.unwrap().status().as_u16() {
+        let response = response.unwrap();
+
+        match response.status().as_u16() {
             200 => {
-                tx_testing.send(id.to_string()).unwrap(); // Found valid ID
-                return;
+                // Found valid ID
+                testing_sender
+                    .send(Message {
+                        event: MessageEvent::Success,
+                        id: id.into(),
+                        video_data: Some(
+                            sonic_rs::from_str(&response.text().await.unwrap()).unwrap(),
+                        ),
+                    })
+                    .unwrap();
+            }
+            401 => {
+                // Not embeddable
+                testing_sender
+                    .send(Message {
+                        event: MessageEvent::NotEmbeddable,
+                        id: id.into(),
+                        video_data: None,
+                    })
+                    .unwrap();
             }
             429 => {
-                tx_testing.send("rate".to_string()).unwrap(); // Rate limited
-                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await; // Rate limited, wait 1 second
+                // Rate limited
+                testing_sender
+                    .send(Message {
+                        event: MessageEvent::RateLimited,
+                        id: id.into(),
+                        video_data: None,
+                    })
+                    .unwrap();
+
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                continue;
             }
             _ => {
-                tx_testing.send("".to_string()).unwrap(); // Invalid ID (usually 400 for not existing)
-                return;
+                // Invalid ID (usually 400 for not existing)
+                testing_sender
+                    .send(Message {
+                        event: MessageEvent::NotFound,
+                        id: id.into(),
+                        video_data: None,
+                    })
+                    .unwrap();
             }
         }
+
+        break; // If we are here we got an acceptable response
     }
+}
+
+fn get_statistics(
+    total_checked_count: &std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    total_ratelimited_count: &std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    elapsed: u64,
+) -> (usize, usize, usize) {
+    let checked_count = total_checked_count.load(std::sync::atomic::Ordering::Relaxed);
+    let ratelimited_count = total_ratelimited_count.load(std::sync::atomic::Ordering::Relaxed);
+
+    let average_checked_count = if elapsed == 0 {
+        checked_count
+    } else {
+        (checked_count as f64 / elapsed as f64).round() as usize
+    };
+
+    (checked_count, ratelimited_count, average_checked_count)
+}
+
+fn terminal_link(url: &str, text: &str) -> String {
+    format!("\x1B]8;;{}\x1B\\{}\x1B]8;;\x1B\\", url, text)
 }
 
 #[tokio::main]
 async fn main() {
-    simplelog::CombinedLogger::init(vec![
-        simplelog::TermLogger::new(
-            simplelog::LevelFilter::Info,
-            simplelog::Config::default(),
-            simplelog::TerminalMode::Mixed,
-            simplelog::ColorChoice::Auto,
-        ),
-        simplelog::WriteLogger::new(
-            simplelog::LevelFilter::Info,
-            simplelog::Config::default(),
-            std::fs::File::create("bruty.log").unwrap(),
-        ),
-    ])
-    .unwrap();
+    let args = Args::parse();
+    setup_logger(args.log).unwrap();
 
-    let args: Vec<String> = std::env::args().collect();
-
-    let starting_id = if args.len() >= 2 {
-        args[1].clone()
-    } else {
-        "3qw99S3".to_string()
-    };
-
-    let testing_threads = if args.len() >= 3 {
-        args[2].parse::<usize>().unwrap()
-    } else {
-        100
-    };
-
-    let discovery_bound = if args.len() >= 4 {
-        args[3].parse::<usize>().unwrap()
-    } else {
-        10000000
-    };
-
-    let (tx_discovery, rx_discovery) = flume::bounded(discovery_bound);
+    if args.threads == 1 {
+        // Seriously, what? Why?
+        log::warn!("Running with a single thread is not recommended. Consider increasing the thread count.");
+    }
 
     log::info!(
-        "Starting with {}, using {} threads with a bound of {}.",
-        starting_id,
-        testing_threads,
-        discovery_bound
+        "ID: {}; Threads: {}; Bound: {}",
+        args.id,
+        args.threads,
+        args.bound
     );
 
-    tokio::spawn(async move {
-        generate_permutations(&mut starting_id.chars().collect(), &tx_discovery);
-        drop(tx_discovery) // Signal that all permutations have been generated
+    let (generator_sender, generator_receiver) = flume::bounded(args.bound);
+
+    let permutation_generator = tokio::spawn(async move {
+        generate_permutations(&mut args.id.chars().collect(), &generator_sender);
+        drop(generator_sender); // Signal that all permutations have been generated
     });
 
-    let (tx_testing, rx_testing) = flume::unbounded();
+    let (testing_sender, testing_receiver) = flume::unbounded();
+    let mut testing_tasks = vec![]; // Stores the tasks which are testing permutations
 
-    let mut tasks = vec![];
+    let client = reqwest::Client::new();
 
-    for _ in 0..testing_threads {
-        let rx_discovery_clone = rx_discovery.clone(); // Clone the receiver of permutations for each worker
-        let tx_testing_clone = tx_testing.clone(); // Clone the sender of test results for each worker
+    for _ in 0..args.threads {
+        let client_clone = client.clone(); // Clone for each worker as it's moved into the worker thread
+        let generator_receiver_clone = generator_receiver.clone(); // Same reason as above
+        let testing_sender_clone = testing_sender.clone(); // Same reason as above above ;`)
 
-        tasks.push(tokio::spawn(async move {
-            let client = reqwest::Client::new();
-
+        testing_tasks.push(tokio::spawn(async move {
             loop {
-                match rx_discovery_clone.recv_async().await {
+                match generator_receiver_clone.try_recv() {
                     Ok(id) => {
-                        try_link(&id, &tx_testing_clone, &client).await;
+                        try_link(&client_clone, &id, &testing_sender_clone).await;
                     }
                     Err(_) => {
-                        break; // Assume all permutations have been assigned a worker
+                        if generator_receiver_clone.is_disconnected() {
+                            // No more permutations are being generated
+                            drop(testing_sender_clone); // Signal that this worker is done
+
+                            return;
+                        }
+
+                        // Otherwise, wait for more permutations to test
+                        continue;
                     }
                 }
             }
-
-            drop(tx_testing_clone); // Signal that this worker is done
         }));
     }
 
-    drop(tx_testing); // Signal that all permutations have been assigned a worker, and that no more will be sent
+    drop(testing_sender); // Signal that all workers have been spawned
 
-    let mut total_count = 0;
-    let mut total_ratelimit_count = 0;
-    let mut total_valid_count = 0;
+    let testing_receiver_clone = testing_receiver.clone(); // Clone for the task_counter
 
-    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(10));
+    let total_checked_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let total_checked_count_writer = total_checked_count.clone();
 
-    loop {
-        tokio::select! {
-            _ = interval.tick() => {
-                // This block executes every 10 seconds
-                if rx_testing.is_disconnected() { // All workers are done, so we should have checked all permutations
-                    break; // Exit the loop when all permutations have been tested
+    let total_ratelimited_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let total_ratelimited_count_writer = total_ratelimited_count.clone();
+
+    let results_handler = tokio::spawn(async move {
+        loop {
+            match testing_receiver_clone.try_recv() {
+                Ok(message) => {
+                    if message.event == MessageEvent::RateLimited {
+                        // If we were ratelimited we are going to try again, so don't count it (yet)
+                        total_ratelimited_count_writer
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+                        continue; // Don't output this message
+                    } else {
+                        total_checked_count_writer
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    }
+
+                    if message.event == MessageEvent::Success {
+                        let video_data = message.video_data.unwrap();
+
+                        log::info!(
+                            "Found {} by {}",
+                            terminal_link(
+                                &format!("https://youtu.be/{}", &message.id),
+                                &video_data.title
+                            ),
+                            terminal_link(&video_data.author_url, &video_data.author_name)
+                        );
+                    } else if message.event == MessageEvent::NotEmbeddable {
+                        log::info!(
+                            "Found {}",
+                            terminal_link(
+                                &format!("https://youtu.be/{}", &message.id),
+                                &message.id
+                            )
+                        );
+                    }
                 }
+                Err(_) => {
+                    if testing_receiver_clone.is_disconnected() {
+                        // No more permutations are being tested
 
-                if total_count > 0 { // At the start the values aren't matched - some permutations may have been testing but we haven't been able to count them yet. So just ignore the first interval
-                    log::info!(
-                        "Tested: {}, Valid: {}, To Test: {}, Rate Limited: {}.",
-                        total_count,
-                        total_valid_count,
-                        rx_discovery.len(),
-                        total_ratelimit_count
-                    );
+                        return; // So there's nothing more for this worker to do
+                    }
+
+                    // Otherwise, wait for more messages to be received
+                    continue;
                 }
             }
-            Ok(id) = rx_testing.recv_async() => {
-                total_count += 1; // Got a result
+        }
+    });
 
-                if id == "rate" {
-                    total_ratelimit_count += 1;
-                } else if id != "" {
-                    // Yoo we got one!
-                    total_valid_count += 1;
-                    log::info!("VALID ID: {}.", id);
+    let interval = tokio::time::Duration::from_secs(args.log_interval as u64);
+    let start = tokio::time::Instant::now();
+    let mut last_tick = start.clone();
+
+    while !testing_receiver.is_disconnected() {
+        // If the sender of the testing channel is dropped, all workers are done
+        if last_tick.elapsed() >= interval {
+            let elapsed = start.elapsed().as_secs();
+
+            let (checked_count, ratelimited_count, average_checked_count) =
+                get_statistics(&total_checked_count, &total_ratelimited_count, elapsed);
+
+            log::debug!(
+                "{}/{} checked @{}/s{}",
+                checked_count,
+                generator_receiver.len(),
+                average_checked_count,
+                if ratelimited_count > 0 {
+                    format!(" with {} ratelimit(s)", ratelimited_count)
+                } else {
+                    "".to_string()
                 }
-            }
-            else => {
-                // Exit the loop when all permutations have been tested
-                break;
-            }
+            );
+
+            last_tick = tokio::time::Instant::now();
         }
     }
 
-    for task in tasks {
-        task.await.unwrap(); // Wait for all workers to finish
+    for _ in 0..500 {
+        if permutation_generator.is_finished()
+            && testing_tasks.iter().all(|task| task.is_finished())
+            && results_handler.is_finished()
+        {
+            break;
+        }
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
 
+    if !permutation_generator.is_finished() {
+        log::error!("assumed end but permutation generator is still running after 5 seconds");
+    }
+
+    if !testing_tasks.iter().all(|task| task.is_finished()) {
+        log::error!("assumed end but testing tasks are still running after 5 seconds");
+    }
+
+    if !results_handler.is_finished() {
+        log::error!("assumed end but results handler is still running after 5 seconds");
+    }
+
+    let elapsed = start.elapsed().as_secs();
+
+    let (checked_count, ratelimited_count, average_checked_count) =
+        get_statistics(&total_checked_count, &total_ratelimited_count, elapsed);
+
     log::info!(
-        "Finished after testing {} permutations, with {} rate limit(s).",
-        total_count,
-        total_ratelimit_count
+        "Checked {} ID{} in {} second{} @{}/s{}",
+        checked_count,
+        if checked_count == 1 { "" } else { "s" },
+        elapsed,
+        if elapsed == 1 { "" } else { "s" },
+        average_checked_count,
+        if ratelimited_count > 0 {
+            format!(" with {} ratelimit(s)", ratelimited_count)
+        } else {
+            "".to_string()
+        }
     );
 }

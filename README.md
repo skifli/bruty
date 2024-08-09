@@ -3,7 +3,6 @@
 - [Bruty](#bruty)
   - [Running (building from source)](#running-building-from-source)
   - [Usage](#usage)
-    - [Notes](#notes)
 
 Brute forces the rest of a YouTube link when you have *part* of it, but not the full link. It successfully obtained `TlTxAwYypvs` a valid YT vid link from `TlTxAwYy` in **21 seconds** (at a total average of 2.9K requests per second).
 
@@ -17,15 +16,19 @@ Brute forces the rest of a YouTube link when you have *part* of it, but not the 
 
 ## Usage
 
-> [!NOTE]
-> You have to do them in order, I'm not spending more time to add proper argparsing lol.
+```
+Brute-forces the rest of a YouTube video ID when you have part of it
 
-| Argument | Description                                                                                            | Default    |
-| -------- | ------------------------------------------------------------------------------------------------------ | ---------- |
-| 1        | The target YouTube **ID** to start permutations from.                                                  | `3qw99S3`  |
-| 2        | The number of **threads** to use.                                                                      | `100`      |
-| 3        | Bound for permutations channel before blocking more until a thread is free. Prevents resource hogging. | `10000000` |
+Usage: bruty [OPTIONS] <ID>
 
-### Notes
+Arguments:
+  <ID>  YouTube ID to start brute-forcing from
 
-* A `String` is always 24 bytes (according to [this code](https://dhghomon.github.io/easy_rust/Chapter_14.html#:~:text=A%20String%20is%20always%2024%20bytes), which yes I did run to test). 24 bytes * 10000000 = 240000000 bytes which is 240 MB. This is the maximum amount of memory that can be used to store permutations that are awaiting checking. 2.4GB seemed too much (although it would be fine on most, including my, system).
+Options:
+  -t, --threads <THREADS>            Number of threads to use [default: 100]
+  -b, --bound <BOUND>                Bound for permutations channel before blocking more generation [default: 10000000]
+  -l, --log <LOG>                    Log file to write to (won't be overwritten) [default: bruty.log]
+  -l, --log-interval <LOG_INTERVAL>  How long to wait between info logs (in seconds) [default: 10]
+  -h, --help                         Print help
+  -V, --version                      Print version
+```
