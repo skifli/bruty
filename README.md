@@ -16,6 +16,9 @@ Brute forces the rest of a YouTube link when you have *part* of it, but not the 
 
 ## Usage
 
+> [!NOTE]
+> The program *may* output the incorrect amount of permutations tested at the end, rest assured this is purely **visual** and it *has* tested all possible IDs.
+
 ```
 Brute-forces the rest of a YouTube video ID when you have part of it
 
