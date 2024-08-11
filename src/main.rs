@@ -6,6 +6,9 @@ use sonic_rs;
 use std;
 use tokio;
 
+const AUTHOR: &str = "skifli";
+const VERSION: &str = "0.1.1";
+
 const VALID_CHARS: &[char] = &[
     'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's',
     't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L',
@@ -17,8 +20,8 @@ const VALID_CHARS: &[char] = &[
 #[command(
     version,
     about,
-    author = "Skifli",
-    version = "0.1.0",
+    author = AUTHOR,
+    version = VERSION,
     about = "Brute-forces the rest of a YouTube video ID when you have part of it"
 )]
 struct Args {
@@ -86,20 +89,39 @@ fn setup_logger(log_file: String) -> Result<(), fern::InitError> {
         .debug(fern::colors::Color::Magenta)
         .trace(fern::colors::Color::White);
 
-    fern::Dispatch::new()
+    // Create a dispatch for stdout with coloured output
+    let stdout_dispatch = fern::Dispatch::new()
         .format(move |out, message, record| {
             out.finish(format_args!(
-                "{} \x1B[{}m{}\x1B[0m {}", // \x1B[0m resets the color
+                "{} \x1B[{}m{:<5}\x1B[0m {}", // \x1B[0m resets the color
                 chrono::DateTime::<chrono::Local>::from(std::time::SystemTime::now())
                     .format("%H:%M:%S"), // Format time nicely
                 level_colors.get_color(&record.level()).to_fg_str(), // Set color based on log level
-                format!("{:<5}", record.level()), // Pad log level to 5 characters (length of longest log level)
+                record.level(),
                 message
             ))
         })
         .level(log::LevelFilter::Debug)
-        .chain(std::io::stdout())
-        .chain(fern::log_file(log_file)?)
+        .chain(std::io::stdout());
+
+    // Create a dispatch for the log file without coloured output
+    let file_dispatch = fern::Dispatch::new()
+        .format(move |out, message, record| {
+            out.finish(format_args!(
+                "{} {:<5} {}", // No color formatting here
+                chrono::DateTime::<chrono::Local>::from(std::time::SystemTime::now())
+                    .format("%H:%M:%S"), // Format time nicely
+                record.level(),
+                message
+            ))
+        })
+        .level(log::LevelFilter::Trace)
+        .chain(fern::log_file(log_file)?);
+
+    // Combine both dispatchers
+    fern::Dispatch::new()
+        .chain(stdout_dispatch)
+        .chain(file_dispatch)
         .level_for("reqwest", log::LevelFilter::Warn)
         .apply()?;
 
@@ -222,6 +244,8 @@ async fn main() {
         log::warn!("Running with a single thread is not recommended. Consider increasing the thread count.");
     }
 
+    log::debug!("Bruty v{} by {}", VERSION, AUTHOR);
+
     log::info!(
         "ID: {}; Threads: {}; Bound: {}",
         args.id,
@@ -234,6 +258,7 @@ async fn main() {
     let permutation_generator = tokio::spawn(async move {
         generate_permutations(&mut args.id.chars().collect(), &generator_sender);
         drop(generator_sender); // Signal that all permutations have been generated
+        log::trace!("All permutations generated");
     });
 
     let (testing_sender, testing_receiver) = flume::unbounded();
@@ -257,6 +282,7 @@ async fn main() {
                             // No more permutations are being generated
                             drop(testing_sender_clone); // Signal that this worker is done
 
+                            log::trace!("No more permutations to test, ending worker");
                             return;
                         }
 
@@ -286,6 +312,8 @@ async fn main() {
                         // If we were ratelimited we are going to try again, so don't count it (yet)
                         total_ratelimited_count_writer
                             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+                        log::trace!("Rate limited on {}", message.id);
 
                         continue; // Don't output this message
                     } else {
@@ -318,6 +346,7 @@ async fn main() {
                     if testing_receiver_clone.is_disconnected() {
                         // No more permutations are being tested
 
+                        log::trace!("All permutations tested");
                         return; // So there's nothing more for this worker to do
                     }
 
