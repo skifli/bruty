@@ -35,7 +35,7 @@ struct Args {
         short,
         long,
         help = "Bound for permutations channel before blocking more generation",
-        default_value_t = 10000000
+        default_value_t = 100000000
     )]
     bound: usize,
 
