@@ -7,7 +7,7 @@ use std;
 use tokio;
 
 const AUTHOR: &str = "skifli";
-const VERSION: &str = "0.1.1";
+const VERSION: &str = "0.1.2";
 
 const VALID_CHARS: &[char] = &[
     'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's',
@@ -143,6 +143,8 @@ fn generate_permutations(id: &mut Vec<char>, generator_sender: &flume::Sender<Bo
         for &chr in VALID_CHARS {
             let mut new_id = id.clone();
             new_id.push(chr);
+
+            while generator_sender.is_full() {} /* Otherwise the program gets terminated on larger IDs */
 
             generate_permutations(&mut new_id, generator_sender);
         }
