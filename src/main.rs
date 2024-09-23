@@ -6,8 +6,8 @@ use sonic_rs;
 use std;
 use tokio;
 
-const AUTHOR: &str = "skifli";
-const VERSION: &str = "0.1.2";
+const AUTHOR: &str = env!("CARGO_PKG_AUTHORS");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const VALID_CHARS: &[char] = &[
     'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's',
@@ -28,28 +28,33 @@ struct Args {
     /// YouTube ID to start brute-forcing from
     id: String,
 
-    #[arg(short, long, help = "Number of threads to use", default_value_t = 100)]
+    #[arg(
+        short = 't',
+        long = "threads",
+        help = "Number of threads to use",
+        default_value_t = 100
+    )]
     threads: u8,
 
     #[arg(
-        short,
-        long,
+        short = 'b',
+        long = "bound",
         help = "Bound for permutations channel before blocking more generation",
         default_value_t = 100000000
     )]
     bound: usize,
 
     #[arg(
-        short,
-        long,
+        short = 'l',
+        long = "log",
         help = "Log file to write to (won't be overwritten)",
         default_value = "bruty.log"
     )]
     log: String,
 
     #[arg(
-        short,
-        long,
+        short = 'i',
+        long = "log-interval",
         help = "How long to wait between info logs (in seconds)",
         default_value_t = 10
     )]

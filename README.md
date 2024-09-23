@@ -34,7 +34,7 @@ Options:
   -t, --threads <THREADS>            Number of threads to use [default: 100]
   -b, --bound <BOUND>                Bound for permutations channel before blocking more generation [default: 100000000]
   -l, --log <LOG>                    Log file to write to (won't be overwritten) [default: bruty.log]
-  -l, --log-interval <LOG_INTERVAL>  How long to wait between info logs (in seconds) [default: 10]
+  -i, --log-interval <LOG_INTERVAL>  How long to wait between info logs (in seconds) [default: 10]
   -h, --help                         Print help
   -V, --version                      Print version
 ```
