@@ -4,6 +4,8 @@ use fern;
 use reqwest;
 use sonic_rs;
 use std;
+use std::io::Seek;
+use std::io::Write;
 use tokio;
 
 const AUTHOR: &str = env!("CARGO_PKG_AUTHORS");
@@ -45,9 +47,17 @@ struct Args {
     bound: usize,
 
     #[arg(
+        short = 's',
+        long = "save",
+        help = "File to save the current ID to (will be overwritten)",
+        default_value = "bruty_save.txt"
+    )]
+    save: String,
+
+    #[arg(
         short = 'l',
         long = "log",
-        help = "Log file to write to (won't be overwritten)",
+        help = "Log file to write to (will be overwritten)",
         default_value = "bruty.log"
     )]
     log: String,
@@ -59,6 +69,13 @@ struct Args {
         default_value_t = 10
     )]
     log_interval: u64,
+
+    #[arg(
+        short = 'r',
+        long = "start-from-saved",
+        help = "Start from the saved ID instead of the provided one"
+    )]
+    start_from_saved: bool,
 }
 
 // Represents a YT video's data
@@ -109,6 +126,13 @@ fn setup_logger(log_file: String) -> Result<(), fern::InitError> {
         .level(log::LevelFilter::Debug)
         .chain(std::io::stdout());
 
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(log_file.clone())
+        .unwrap(); // Truncate the file first
+
     // Create a dispatch for the log file without coloured output
     let file_dispatch = fern::Dispatch::new()
         .format(move |out, message, record| {
@@ -121,7 +145,12 @@ fn setup_logger(log_file: String) -> Result<(), fern::InitError> {
             ))
         })
         .level(log::LevelFilter::Trace)
-        .chain(fern::log_file(log_file)?);
+        .chain(
+            std::fs::OpenOptions::new()
+                .append(true)
+                .open(log_file)
+                .unwrap(),
+        );
 
     // Combine both dispatchers
     fern::Dispatch::new()
@@ -133,9 +162,24 @@ fn setup_logger(log_file: String) -> Result<(), fern::InitError> {
     Ok(())
 }
 
-fn generate_permutations(id: &mut Vec<char>, generator_sender: &flume::Sender<Box<str>>) {
+fn generate_permutations(
+    id: &mut Vec<char>,
+    generator_sender: &flume::Sender<Box<str>>,
+    split_id: Vec<char>,
+) {
     if id.len() == 10 {
         for &chr in VALID_CHARS {
+            if split_id.len() > id.len() {
+                if VALID_CHARS.iter().position(|&x| x == chr).unwrap()
+                    < VALID_CHARS
+                        .iter()
+                        .position(|&x| x == split_id[id.len()])
+                        .unwrap()
+                {
+                    continue; // Skip this character because it's before the split
+                }
+            }
+
             id.push(chr); // No need to clone here because it was cloned for us by the recursive call
 
             generator_sender
@@ -146,12 +190,24 @@ fn generate_permutations(id: &mut Vec<char>, generator_sender: &flume::Sender<Bo
         }
     } else {
         for &chr in VALID_CHARS {
+            if split_id.len() > id.len() {
+                // if chr position in VALID_CHARS is less than the split_id position
+                if VALID_CHARS.iter().position(|&x| x == chr).unwrap()
+                    < VALID_CHARS
+                        .iter()
+                        .position(|&x| x == split_id[id.len()])
+                        .unwrap()
+                {
+                    continue; // Skip this character because it's before the split
+                }
+            }
+
             let mut new_id = id.clone();
             new_id.push(chr);
 
             while generator_sender.is_full() {} /* Otherwise the program gets terminated on larger IDs */
 
-            generate_permutations(&mut new_id, generator_sender);
+            generate_permutations(&mut new_id, generator_sender, split_id.clone());
         }
     }
 }
@@ -244,6 +300,8 @@ fn terminal_link(url: &str, text: &str) -> String {
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
+    let args_save = args.save.clone();
+
     setup_logger(args.log).unwrap();
 
     if args.threads == 1 {
@@ -262,8 +320,24 @@ async fn main() {
 
     let (generator_sender, generator_receiver) = flume::bounded(args.bound);
 
+    let mut split_id = "".to_string();
+
+    if args.start_from_saved {
+        split_id = std::fs::read_to_string(args_save.clone()).expect("Failed to read save file");
+    }
+
+    if !args.start_from_saved && !split_id.is_empty() {
+        log::error!("Save file is not empty, but --start-from-saved was not provided. Exiting.");
+
+        std::process::exit(1);
+    }
+
     let permutation_generator = tokio::spawn(async move {
-        generate_permutations(&mut args.id.chars().collect(), &generator_sender);
+        generate_permutations(
+            &mut args.id.chars().collect(),
+            &generator_sender,
+            split_id.chars().collect(),
+        );
         drop(generator_sender); // Signal that all permutations have been generated
         log::trace!("All permutations generated");
     });
@@ -312,53 +386,77 @@ async fn main() {
     let total_ratelimited_count_writer = total_ratelimited_count.clone();
 
     let results_handler = tokio::spawn(async move {
+        let mut save_file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(args.save)
+            .unwrap();
+
+        let mut timer_interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
+        let mut last_id = Box::from("");
+
         loop {
-            match testing_receiver_clone.try_recv() {
-                Ok(message) => {
-                    if message.event == MessageEvent::RateLimited {
-                        // If we were ratelimited we are going to try again, so don't count it (yet)
-                        total_ratelimited_count_writer
-                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            tokio::select! {
+                message = testing_receiver_clone.recv_async() => {
+                    match message {
+                        Ok(message) => {
+                            if message.event == MessageEvent::RateLimited {
+                                // If we were ratelimited we are going to try again, so don't count it (yet)
+                                total_ratelimited_count_writer
+                                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-                        log::trace!("Rate limited on {}", message.id);
+                                log::trace!("Rate limited on {}", message.id);
 
-                        continue; // Don't output this message
-                    } else {
-                        total_checked_count_writer
-                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    }
+                                continue; // Don't output this message
+                            } else {
+                                total_checked_count_writer
+                                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            }
 
-                    if message.event == MessageEvent::Success {
-                        let video_data = message.video_data.unwrap();
+                            if message.event == MessageEvent::Success {
+                                let video_data = message.video_data.unwrap();
 
-                        log::info!(
-                            "Found {} by {}",
-                            terminal_link(
-                                &format!("https://youtu.be/{}", &message.id),
-                                &video_data.title
-                            ),
-                            terminal_link(&video_data.author_url, &video_data.author_name)
-                        );
-                    } else if message.event == MessageEvent::NotEmbeddable {
-                        log::info!(
-                            "Found {}",
-                            terminal_link(
-                                &format!("https://youtu.be/{}", &message.id),
-                                &message.id
-                            )
-                        );
+                                log::info!(
+                                    "Found {} by {}",
+                                    terminal_link(
+                                        &format!("https://youtu.be/{}", &message.id),
+                                        &video_data.title
+                                    ),
+                                    terminal_link(&video_data.author_url, &video_data.author_name)
+                                );
+                            } else if message.event == MessageEvent::NotEmbeddable {
+                                log::info!(
+                                    "Found {}",
+                                    terminal_link(
+                                        &format!("https://youtu.be/{}", &message.id),
+                                        &message.id
+                                    )
+                                );
+                            }
+
+                            last_id = message.id;
+                        }
+                        Err(_) => {
+                            if testing_receiver_clone.is_disconnected() {
+                                // No more permutations are being tested
+
+                                log::trace!("All permutations tested");
+                                return; // So there's nothing more for this worker to do
+                            }
+
+                            // Otherwise, wait for more messages to be received
+                            continue;
+                        }
                     }
                 }
-                Err(_) => {
-                    if testing_receiver_clone.is_disconnected() {
-                        // No more permutations are being tested
-
-                        log::trace!("All permutations tested");
-                        return; // So there's nothing more for this worker to do
-                    }
-
-                    // Otherwise, wait for more messages to be received
-                    continue;
+                _ = timer_interval.tick() => {
+                    save_file.set_len(0).unwrap(); // Clear the file
+                    save_file.seek(std::io::SeekFrom::Start(0)).unwrap(); // Reset the cursor
+                    save_file.write(last_id.as_bytes()).unwrap(); /* We would have received the first ID in the channel, which is the earliest in
+                                                                    the sequence (since the generate_permutations function goes in order, luckily).
+                                                                    This means that is the earliest ID that we have not checked yet. */
+                    save_file.flush().unwrap(); // Write the changes to the file
                 }
             }
         }
@@ -433,4 +531,6 @@ async fn main() {
             "".to_string()
         }
     );
+
+    std::fs::remove_file(args_save).unwrap(); // Remove the save file
 }

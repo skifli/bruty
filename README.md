@@ -33,8 +33,10 @@ Arguments:
 Options:
   -t, --threads <THREADS>            Number of threads to use [default: 100]
   -b, --bound <BOUND>                Bound for permutations channel before blocking more generation [default: 100000000]
-  -l, --log <LOG>                    Log file to write to (won't be overwritten) [default: bruty.log]
+  -s, --save <SAVE>                  File to save the current ID to (will be overwritten) [default: bruty_save.txt]
+  -l, --log <LOG>                    Log file to write to (will be overwritten) [default: bruty.log]
   -i, --log-interval <LOG_INTERVAL>  How long to wait between info logs (in seconds) [default: 10]
+  -r, --start-from-saved             Start from the saved ID instead of the provided one
   -h, --help                         Print help
   -V, --version                      Print version
 ```
