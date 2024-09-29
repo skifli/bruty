@@ -109,7 +109,7 @@ pub async fn results_progress_handler(
                 state.current_id = awaiting_current_id_update.clone(); // Update the current ID
                 persist
                     .save(
-                        "state",
+                        "server_state",
                         bruty_share::types::ServerState {
                             current_id: state.current_id.clone(),
                             starting_id: state.starting_id.clone(),
