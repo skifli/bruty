@@ -40,6 +40,11 @@ pub fn permutation_generator(
             let mut new_id = id.clone();
             new_id.push(chr);
 
+            if new_id.len() == 8 {
+                // Save the current ID
+                current_id_sender.send(new_id.clone()).unwrap();
+            }
+
             permutation_generator(
                 &mut new_id,
                 starting_id.clone(),
@@ -47,10 +52,6 @@ pub fn permutation_generator(
                 results_awaiting_sender,
                 current_id_sender,
             );
-            if id.len() == 8 {
-                // Save the current ID
-                current_id_sender.send(id.clone()).unwrap();
-            }
         }
     }
 }
@@ -74,21 +75,27 @@ pub async fn results_progress_handler(
     let mut awaiting_current_id_update = Vec::new();
 
     loop {
-        tokio::select! {
-            id = results_awaiting_receiver.recv_async() => {
-                if !awaiting_results.contains(&id) {
-                    awaiting_results.push(id); // Add the ID to the list of awaiting results, if it's not already there
-                    // It may be already there if a client disconnected before sending the results
-                }
+        let current_id_receiver_try = current_id_receiver.try_recv();
+
+        if let Ok(id) = current_id_receiver_try {
+            log::info!("Received Current ID: {}", id.iter().collect::<String>());
+
+            awaiting_current_id_update = id; // Get the current ID
+        }
+
+        let results_awaiting_receiver_try = results_awaiting_receiver.try_recv();
+
+        if let Ok(id) = results_awaiting_receiver_try {
+            if !awaiting_results.contains(&id) {
+                awaiting_results.push(id); // Add the ID to the list of awaiting results, if it's not already there
+                                           // It may be already there if a client disconnected before sending the results
             }
-            id = results_received_receiver.recv_async() => {
-                awaiting_results.retain(|x| x != &id); // Remove the ID from the list of awaiting results
-            }
-            id = current_id_receiver.recv_async() => {
-                if let Ok(id) = id {
-                    awaiting_current_id_update = id // Set the current ID to the ID we received
-                }
-            }
+        }
+
+        let results_received_receiver_try = results_received_receiver.try_recv();
+
+        if let Ok(id) = results_received_receiver_try {
+            awaiting_results.retain(|x| x != &id); // Remove the ID from the list of awaiting results
         }
 
         if !awaiting_current_id_update.is_empty() {
@@ -96,14 +103,24 @@ pub async fn results_progress_handler(
             // This means that we are not waiting for any results from the previous current ID.
 
             if awaiting_results.iter().all(|x| {
-                x.as_ref()
-                    .map_or(false, |v| v.starts_with(&awaiting_current_id_update))
+                x.starts_with(&awaiting_current_id_update)
                 // Doesn't work with later IDs though. E.g., if the list has 'Aca' and we are trying to update to 'Ab', it won't work.
             }) {
                 state.current_id = awaiting_current_id_update.clone(); // Update the current ID
-                persist.save("state", &mut *state).unwrap();
+                persist
+                    .save(
+                        "state",
+                        bruty_share::types::ServerState {
+                            current_id: state.current_id.clone(),
+                            starting_id: state.starting_id.clone(),
+                        },
+                    )
+                    .unwrap(); // Save the current ID to the database
 
-                log::info!("Current ID updated to {:?}", state.current_id);
+                log::info!(
+                    "Current ID updated to {}",
+                    awaiting_current_id_update.iter().collect::<String>()
+                );
                 awaiting_current_id_update.clear(); // Clear the current ID
             }
         }

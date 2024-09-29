@@ -11,8 +11,6 @@ use warp::Filter;
 mod payload_handlers;
 mod server_threads;
 
-const DEBUG: bool = true;
-
 const AUTHOR: &str = env!("CARGO_PKG_AUTHORS");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -374,11 +372,6 @@ async fn main(
     bruty_share::logger::setup(true, None).unwrap(); // Setup logger without a file because we are in a server environment
 
     log::info!("Bruty Server v{} by {}.", VERSION, AUTHOR);
-
-    if DEBUG {
-        bruty_share::setup_test_data(&persist);
-        log::info!("Test data set up.");
-    }
 
     let mut state: bruty_share::types::ServerState = persist.load("server_state").unwrap();
 

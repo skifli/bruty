@@ -10,39 +10,6 @@ pub const VALID_CHARS: &[char] = &[
     '5', '6', '7', '8', '9', '-', '_',
 ];
 
-/// Sets up the testing data when in a DEBUG environment.
-///
-/// # Arguments
-/// * `persist` - The persist instance to save the data to.
-pub fn setup_test_data(persist: &shuttle_persist::PersistInstance) {
-    persist
-        .save(
-            "server_state",
-            types::ServerState {
-                current_id: vec!['T', 'l', 'T', 'x', 'A', 'w', 'Y', 'y'],
-                starting_id: vec!['T', 'l', 'T', 'x', 'A', 'w', 'Y'],
-            },
-        )
-        .unwrap();
-    persist
-        .save(
-            "users",
-            vec![
-                types::User {
-                    id: 0,
-                    name: "skifli".to_string(),
-                    secret: "summer".to_string(),
-                },
-                types::User {
-                    id: 1,
-                    name: "diddly".to_string(),
-                    secret: "winter".to_string(),
-                },
-            ],
-        )
-        .unwrap();
-}
-
 /// Error codes sent with an InvalidSession OP code
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub enum ErrorCode {

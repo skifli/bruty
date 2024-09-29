@@ -195,14 +195,6 @@ pub async fn test_request(
 
     session.awaiting_results = id.clone(); // Set the awaiting results
 
-    log::info!(
-        "Requesting test for {} from {} (ID {}), sending to {}.",
-        id.iter().collect::<String>(),
-        session.user.name,
-        session.user.id,
-        session.ip
-    );
-
     websocket_sender
         .send_payload(bruty_share::Payload {
             op_code: bruty_share::OperationCode::TestRequestData,
@@ -290,14 +282,6 @@ pub async fn testing_result(
 
         return;
     }
-
-    log::info!(
-        "Received results for {} from {} (ID {}), sent from {}.",
-        testing_result_data.id.iter().collect::<String>(),
-        session.user.name,
-        session.user.id,
-        session.ip
-    );
 
     server_channels
         .results_received_sender
