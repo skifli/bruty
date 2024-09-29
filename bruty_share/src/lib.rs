@@ -66,14 +66,14 @@ impl ErrorCode {
             ErrorCode::UnexpectedOP => InvalidSessionData {
                 code: ErrorCode::UnexpectedOP,
                 description: "Unexpected OP code".to_string(),
-                explanation: "The server
-                received an OP code it should not."
+                explanation: "The server received an OP code it should not."
                     .to_string(),
             },
             ErrorCode::DecodeError => InvalidSessionData {
                 code: ErrorCode::DecodeError,
                 description: "Decode error".to_string(),
-                explanation: "The server received an invalid payload."
+                explanation: "The server
+                received an invalid payload."
                     .to_string(),
             },
             ErrorCode::AuthenticationFailed => InvalidSessionData {
@@ -101,8 +101,7 @@ impl ErrorCode {
             ErrorCode::ExpectingResults => InvalidSessionData {
                 code: ErrorCode::ExpectingResults,
                 description: "Expecting results".to_string(),
-                explanation:
-                    "You need to send the results of the previous test before requesting a new one.".to_string(),
+                explanation: "You need to send the results of the previous test before requesting a new one.".to_string(),
             },
             ErrorCode::WrongResultString => InvalidSessionData {
                 code: ErrorCode::WrongResultString,
@@ -125,8 +124,10 @@ pub enum OperationCode {
     Heartbeat,
     /// Send | Starts a new session
     Identify,
+    /// Send | Requests a test
+    TestRequest,
     /// Receive | Requests a test
-    RequestingTest,
+    TestRequestData,
     /// Send | Sends the test results
     TestingResult,
     /// Receive | The session is invalid
@@ -139,6 +140,11 @@ pub struct IdentifyData {
     pub client_version: String,
     pub id: i16,
     pub secret: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub struct TestRequestData {
+    pub id: Vec<char>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -160,7 +166,8 @@ pub struct InvalidSessionData {
 pub enum Data {
     Heartbeat,
     Identify(IdentifyData),
-    RequestingTest,
+    TestRequest,
+    TestRequestData(TestRequestData),
     TestingResult(TestingResultData),
     InvalidSession(InvalidSessionData),
 }

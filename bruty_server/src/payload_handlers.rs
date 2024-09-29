@@ -166,7 +166,7 @@ pub async fn identify(
 /// * `websocket_sender` - The WebSocket sender.
 /// * `session` - The session of the connection.
 /// * `server_channels` - The server's channels.
-pub async fn requesting_test(
+pub async fn test_request(
     websocket_sender: &mut WebSocketSender,
     session: &mut bruty_share::types::Session,
     server_channels: bruty_share::types::ServerChannels,
@@ -205,8 +205,8 @@ pub async fn requesting_test(
 
     websocket_sender
         .send_payload(bruty_share::Payload {
-            op_code: bruty_share::OperationCode::RequestingTest,
-            data: bruty_share::Data::RequestingTest(bruty_share::RequestingTestData { id }),
+            op_code: bruty_share::OperationCode::TestRequestData,
+            data: bruty_share::Data::TestRequestData(bruty_share::TestRequestData { id }),
         })
         .await
         .unwrap();

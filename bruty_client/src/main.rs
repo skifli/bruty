@@ -157,8 +157,8 @@ async fn handle_connection(
 
     websocket_sender
         .send_payload(bruty_share::Payload {
-            op_code: bruty_share::OperationCode::RequestingTest,
-            data: bruty_share::Data::RequestingTest,
+            op_code: bruty_share::OperationCode::TestRequest,
+            data: bruty_share::Data::TestRequest,
         })
         .await
         .unwrap(); // Request a test

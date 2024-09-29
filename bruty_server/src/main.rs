@@ -112,16 +112,17 @@ async fn handle_msg(
             // Identifies the client
             payload_handlers::identify(websocket_sender, payload, session, persist).await;
         }
-        bruty_share::OperationCode::RequestingTest => {
+        bruty_share::OperationCode::TestRequest => {
             // Requests a test
-            payload_handlers::requesting_test(websocket_sender, session, server_channels).await;
+            payload_handlers::test_request(websocket_sender, session, server_channels).await;
         }
         bruty_share::OperationCode::TestingResult => {
             // Process the test results
             payload_handlers::testing_result(websocket_sender, payload, session, server_channels)
                 .await;
         }
-        bruty_share::OperationCode::InvalidSession => {
+        bruty_share::OperationCode::TestRequestData
+        | bruty_share::OperationCode::InvalidSession => {
             // We should never receive these from the client
             // Likely a bug, so we are going to close the connection
             log::warn!(
