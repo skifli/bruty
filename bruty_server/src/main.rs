@@ -385,15 +385,15 @@ async fn main(
                 bruty_share::types::User {
                     id: 1,
                     name: "duvox".to_string(),
-                    secret: "acw34".to_string(),
+                    secret: "acw34a".to_string(),
                 },
                 bruty_share::types::User {
-                    id: 1,
+                    id: 2,
                     name: "gost".to_string(),
                     secret: "32a;^%".to_string(),
                 },
                 bruty_share::types::User {
-                    id: 1,
+                    id: 3,
                     name: "finsanity".to_string(),
                     secret: "wev;23".to_string(),
                 },
