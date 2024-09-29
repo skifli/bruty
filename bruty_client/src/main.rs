@@ -89,7 +89,6 @@ async fn handle_msg(
     payload_send_sender: &flume::Sender<bruty_share::Payload>,
     id_sender: &flume::Sender<Vec<char>>,
     positives_receiver: &flume::Receiver<bruty_share::types::Video>,
-    reqwest_client: &reqwest::Client,
     msg: Message,
 ) -> bool {
     let payload: bruty_share::Payload = match rmp_serde::from_read(msg.into_data().as_slice()) {
@@ -234,7 +233,7 @@ async fn handle_connection(
 
                 if msg.is_binary() {
                     // Binary WebSocket message received
-                    if !handle_msg(&mut websocket_sender, &payload_send_sender, &id_sender, &positives_receiver, &reqwest_client, msg).await {
+                    if !handle_msg(&mut websocket_sender, &payload_send_sender, &id_sender, &positives_receiver, msg).await {
                         return;
                     }
                 } else if msg.is_close() {
