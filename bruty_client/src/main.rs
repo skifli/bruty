@@ -100,6 +100,7 @@ async fn handle_msg(
         }
     };
 
+    #[allow(unreachable_patterns)]
     match payload.op_code {
         bruty_share::OperationCode::InvalidSession => {
             // The session is invalid
@@ -130,8 +131,7 @@ async fn handle_msg(
             )
             .await;
         }
-        bruty_share::OperationCode::Heartbeat
-        | bruty_share::OperationCode::Identify
+        bruty_share::OperationCode::Identify
         | bruty_share::OperationCode::TestRequest
         | bruty_share::OperationCode::TestingResult => {
             // We should never receive these from the client
@@ -212,8 +212,6 @@ async fn handle_connection(
         .await
         .unwrap(); // Request a test
 
-    let mut heartbeat_interval = tokio::time::interval(std::time::Duration::from_secs(30));
-
     loop {
         tokio::select! {
             result = websocket_receiver.next() => {
@@ -251,14 +249,6 @@ async fn handle_connection(
                 if let Ok(payload) = msg {
                     websocket_sender.send_payload(payload).await.unwrap();
                 }
-            }
-            _ = heartbeat_interval.tick() => {
-                websocket_sender .send_payload(bruty_share::Payload {
-                    op_code: bruty_share::OperationCode::Heartbeat,
-                    data: bruty_share::Data::Heartbeat,
-                }).await.unwrap(); // Send a heartbeat to the server
-
-                log::debug!("Sent heartbeat");
             }
         }
     }

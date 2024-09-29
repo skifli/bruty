@@ -55,8 +55,6 @@ pub struct ServerChannels {
 pub struct Session {
     pub authenticated: bool,
     pub awaiting_results: Vec<char>,
-    pub heartbeat_received: bool,
-    pub heartbeat_timer: tokio::time::Instant,
     pub ip: String,
     pub user: User,
 }

@@ -96,16 +96,6 @@ async fn handle_msg(
 
     #[allow(unreachable_patterns)]
     match payload.op_code {
-        bruty_share::OperationCode::Heartbeat => {
-            // Resets heartbeat timer
-            log::debug!(
-                "Received heartbeat from {} (ID {}), sent from {}.",
-                session.user.name,
-                session.user.id,
-                session.ip
-            );
-            payload_handlers::heartbeat(session).await;
-        }
         bruty_share::OperationCode::Identify => {
             // Identifies the client
             payload_handlers::identify(websocket_sender, payload, session, persist).await;
@@ -175,8 +165,6 @@ async fn handle_websocket(
     let mut abruptly_closed = false;
     let mut manually_closed = false;
 
-    let mut heartbeat_timer = Box::pin(tokio::time::sleep_until(session.heartbeat_timer));
-
     loop {
         tokio::select! {
             result = websocket_receiver.next() => {
@@ -221,35 +209,6 @@ async fn handle_websocket(
                     log::warn!("Invalid WebSocket message type received from {} (ID {}), sent from {}.", session.user.name, session.user.id, session.ip);
                     continue;
                 }
-
-                if session.heartbeat_received { // If a heartbeat was received this iteration
-                    heartbeat_timer = Box::pin(tokio::time::sleep_until(session.heartbeat_timer)); // Reset the heartbeat timer
-
-                    session.heartbeat_received = false;
-                }
-            }
-            _ = &mut heartbeat_timer => {
-                // Heartbeat timer expired
-                // Close the connection
-                // We could, like Discord, request a heartbeat from the client, but that's more complex
-                // Anyway, we require one every 5 seconds and the client SHOULD send one every 3 seconds, so that's plenty of time
-
-                log::warn!("Heartbeat timer expired for {} (ID {}), connected to {}.", session.user.name, session.user.id, session.ip);
-
-                websocket_sender
-                .send_payload(bruty_share::Payload {
-                    op_code: bruty_share::OperationCode::InvalidSession,
-                    data: bruty_share::Data::InvalidSession(
-                        bruty_share::ErrorCode::SessionTimeout.populate(),
-                    ),
-                })
-                .await
-                .unwrap();
-                websocket_sender.close().await.unwrap();
-
-                manually_closed = true;
-
-                break;
             }
         }
     }
@@ -348,9 +307,6 @@ fn handle_connection(
                     authenticated: false,
                     awaiting_results: Vec::new(),
                     ip,
-                    heartbeat_received: true,
-                    heartbeat_timer: tokio::time::Instant::now()
-                        + tokio::time::Duration::from_secs(45),
                     user: bruty_share::types::User {
                         id: 0,
                         name: "unknown".to_string(),
