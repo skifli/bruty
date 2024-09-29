@@ -1,43 +1,47 @@
 /// Generates permutations of the ID.
 ///
 /// # Arguments
-/// * `id` - The current ID.
-/// * `starting_id` - The ID to start from.
+/// * `id` - The ID to generate permutations for.
+/// * `current_id` - The current ID.
 /// * `id_sender` - The sender to send the current ID to (so it can be passed to client(s)).
 /// * `results_awaiting_sender` - The sender to send the current ID to (so we can make sure we get all the results we asked for).
 /// * `current_id_sender` - The sender to send the current ID to when we get to a new ID of length 8.
 pub fn permutation_generator(
-    id: &mut Vec<char>,
-    starting_id: Vec<char>,
+    starting_id: &mut Vec<char>,
+    current_id: Vec<char>,
     id_sender: &flume::Sender<Vec<char>>,
     results_awaiting_sender: &flume::Sender<Vec<char>>,
     current_id_sender: &flume::Sender<Vec<char>>,
 ) {
-    if id.len() == 9 {
+    if starting_id.len() == 9 {
         while id_sender.len() > 0 {
             // Wait for IDs
         }
 
-        id_sender.send(id.clone()).unwrap(); // Send the ID to the client
-        results_awaiting_sender.send(id.clone()).unwrap(); // Say we've asked for these results
+        id_sender.send(starting_id.clone()).unwrap(); // Send the ID to the client
+        results_awaiting_sender.send(starting_id.clone()).unwrap(); // Say we've asked for these results
     } else {
         for &chr in bruty_share::VALID_CHARS {
-            if starting_id.len() > id.len() {
-                // If the character is before where we left off, skip it
-                if bruty_share::VALID_CHARS
-                    .iter()
-                    .position(|&x| x == chr)
-                    .unwrap()
-                    < bruty_share::VALID_CHARS
+            if current_id.len() > starting_id.len() {
+                // Check if current_id starts with starting_id
+                // If not, we've moved on to a new ID
+                if current_id.starts_with(starting_id) {
+                    // If the character is before where we left off, skip it
+                    if bruty_share::VALID_CHARS
                         .iter()
-                        .position(|&x| x == starting_id[id.len()])
+                        .position(|&x| x == chr)
                         .unwrap()
-                {
-                    continue; // Skip this character because it's before the current character
+                        < bruty_share::VALID_CHARS
+                            .iter()
+                            .position(|&x| x == current_id[starting_id.len()])
+                            .unwrap()
+                    {
+                        continue; // Skip this character because it's before the current character
+                    }
                 }
             }
 
-            let mut new_id = id.clone();
+            let mut new_id = starting_id.clone();
             new_id.push(chr);
 
             if new_id.len() == 8 {
@@ -47,7 +51,7 @@ pub fn permutation_generator(
 
             permutation_generator(
                 &mut new_id,
-                starting_id.clone(),
+                current_id.clone(),
                 id_sender,
                 results_awaiting_sender,
                 current_id_sender,

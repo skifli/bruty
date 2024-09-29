@@ -353,16 +353,6 @@ async fn main(
                     name: "finsanity".to_string(),
                     secret: "wev;23".to_string(),
                 },
-                bruty_share::types::User {
-                    id: 4,
-                    name: "inkydiamonds".to_string(),
-                    secret: "ce;3$12".to_string(),
-                },
-                bruty_share::types::User {
-                    id: 5,
-                    name: "cyber".to_string(),
-                    secret: "cek$51".to_string(),
-                },
             ],
         )
         .unwrap();
