@@ -1,14 +1,16 @@
-use std::f32::consts::E;
-
 use bruty_share;
 use chrono;
 use clap::Parser;
+use flume;
 use futures_util::SinkExt;
 use futures_util::StreamExt;
 use log;
 use tokio;
 use tokio_tungstenite;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+
+mod client_threads;
+mod payload_handlers;
 
 const AUTHOR: &str = env!("CARGO_PKG_AUTHORS");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -66,11 +68,22 @@ struct Args {
 ///
 /// # Arguments
 /// * `websocket_sender` - The WebSocket sender.
+/// * `payload_send_sender` - The sender for sending payloads.
+/// * `id_sender` - The sender for sending IDs.
+/// * `positives_receiver` - The receiver for receiving positive video IDs.
+/// * `reqwest_client` - The reqwest client.
 /// * `msg` - The WebSocket message.
 ///
 /// # Returns
 /// * `bool` - Whether the connection shouldn't be closed.
-async fn handle_msg(websocket_sender: &mut WebSocketSender, msg: Message) -> bool {
+async fn handle_msg(
+    websocket_sender: &mut WebSocketSender,
+    payload_send_sender: &flume::Sender<bruty_share::Payload>,
+    id_sender: &flume::Sender<Vec<char>>,
+    positives_receiver: &flume::Receiver<bruty_share::types::Video>,
+    reqwest_client: &reqwest::Client,
+    msg: Message,
+) -> bool {
     let payload: bruty_share::Payload = match rmp_serde::from_read(msg.into_data().as_slice()) {
         Ok(payload) => payload,
         Err(err) => {
@@ -100,7 +113,21 @@ async fn handle_msg(websocket_sender: &mut WebSocketSender, msg: Message) -> boo
 
             return false;
         }
-        bruty_share::OperationCode::Heartbeat => {
+        bruty_share::OperationCode::TestRequestData => {
+            payload_handlers::test_request_data(
+                websocket_sender,
+                payload_send_sender,
+                id_sender,
+                positives_receiver,
+                reqwest_client,
+                payload,
+            )
+            .await;
+        }
+        bruty_share::OperationCode::Heartbeat
+        | bruty_share::OperationCode::Identify
+        | bruty_share::OperationCode::TestRequest
+        | bruty_share::OperationCode::TestingResult => {
             // We should never receive these from the client
             // Likely a bug, so we are going to close the connection
             log::warn!("Received unexpected OP code, closing connection");
@@ -142,6 +169,21 @@ async fn handle_connection(
     user: bruty_share::types::User,
 ) {
     let (mut websocket_sender, mut websocket_receiver) = websocket_stream.split();
+    let (payload_send_sender, payload_send_receiver) = flume::unbounded();
+    let (id_sender, id_receiver) = flume::unbounded();
+    let (positives_sender, positives_receiver) = flume::unbounded();
+
+    let reqwest_client = reqwest::Client::new();
+
+    for _ in 0..4096 {
+        let id_receiver = id_receiver.clone();
+        let reqwest_client = reqwest_client.clone();
+        let positives_sender = positives_sender.clone();
+
+        tokio::spawn(async move {
+            client_threads::id_checker(&id_receiver, &reqwest_client, &positives_sender).await;
+        });
+    }
 
     websocket_sender
         .send_payload(bruty_share::Payload {
@@ -184,7 +226,7 @@ async fn handle_connection(
 
                 if msg.is_binary() {
                     // Binary WebSocket message received
-                    if !handle_msg(&mut websocket_sender, msg).await {
+                    if !handle_msg(&mut websocket_sender, &payload_send_sender, &id_sender, &positives_receiver, &reqwest_client, msg).await {
                         return;
                     }
                 } else if msg.is_close() {
@@ -196,6 +238,11 @@ async fn handle_connection(
 
                     log::warn!("Invalid WebSocket message type received (expected binary)");
                     continue;
+                }
+            }
+            msg = payload_send_receiver.recv_async() => {
+                if let Ok(payload) = msg {
+                    websocket_sender.send_payload(payload).await.unwrap();
                 }
             }
             _ = heartbeat_interval.tick() => {
@@ -248,17 +295,17 @@ async fn main() {
     let args: Args = Args::parse();
     let remote_url = "wss://bruty.shuttleapp.rs/ivocord";
 
-    log::info!("Bruty Client v{} by {}.", VERSION, AUTHOR);
-
     bruty_share::logger::setup(
         true,
         Some(
             chrono::DateTime::<chrono::Local>::from(std::time::SystemTime::now())
-                .format("bruty_%d-%m-%Y_%H:%M:%S.log")
+                .format("bruty_%d-%m-%Y_%H-%M-%S.log")
                 .to_string(),
         ),
     )
     .unwrap();
+
+    log::info!("Bruty Client v{} by {}.", VERSION, AUTHOR);
 
     create_connection(remote_url, args.id, args.secret).await;
 }

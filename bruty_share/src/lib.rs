@@ -19,7 +19,7 @@ pub fn setup_test_data(persist: &shuttle_persist::PersistInstance) {
         .save(
             "server_state",
             types::ServerState {
-                current_id: vec!['T', 'l', 'T', 'x', 'A', 'w', 'Y', 'a'],
+                current_id: vec!['T', 'l', 'T', 'x', 'A', 'w', 'Y', 'y'],
                 starting_id: vec!['T', 'l', 'T', 'x', 'A', 'w', 'Y'],
             },
         )
@@ -27,11 +27,18 @@ pub fn setup_test_data(persist: &shuttle_persist::PersistInstance) {
     persist
         .save(
             "users",
-            vec![types::User {
-                id: 0,
-                name: "skifli".to_string(),
-                secret: "summer".to_string(),
-            }],
+            vec![
+                types::User {
+                    id: 0,
+                    name: "skifli".to_string(),
+                    secret: "summer".to_string(),
+                },
+                types::User {
+                    id: 1,
+                    name: "diddly".to_string(),
+                    secret: "winter".to_string(),
+                },
+            ],
         )
         .unwrap();
 }

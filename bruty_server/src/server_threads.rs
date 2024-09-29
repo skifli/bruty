@@ -14,6 +14,10 @@ pub fn permutation_generator(
     current_id_sender: &flume::Sender<Vec<char>>,
 ) {
     if id.len() == 9 {
+        while id_sender.len() > 0 {
+            // Wait for IDs
+        }
+
         id_sender.send(id.clone()).unwrap(); // Send the ID to the client
         results_awaiting_sender.send(id.clone()).unwrap(); // Say we've asked for these results
     } else {
@@ -43,11 +47,10 @@ pub fn permutation_generator(
                 results_awaiting_sender,
                 current_id_sender,
             );
-        }
-
-        if id.len() == 8 {
-            // Save the current ID
-            current_id_sender.send(id.clone()).unwrap();
+            if id.len() == 8 {
+                // Save the current ID
+                current_id_sender.send(id.clone()).unwrap();
+            }
         }
     }
 }

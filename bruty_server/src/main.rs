@@ -263,6 +263,8 @@ async fn handle_websocket(
             session.user.id,
             session.ip
         );
+
+        websocket_sender.close().await.unwrap();
     } else if manually_closed {
         log::info!(
             "Manually closed WebSocket connection with {} (ID {}), connected from {}.",
@@ -279,14 +281,14 @@ async fn handle_websocket(
         );
     }
 
-    log::info!(
-        "Cleaning up session for {} (ID {}), connected from {}.",
-        session.user.name,
-        session.user.id,
-        session.ip
-    );
+    if !session.awaiting_results.is_empty() {
+        log::info!(
+            "Cleaning up session for {} (ID {}), connected from {}.",
+            session.user.name,
+            session.user.id,
+            session.ip
+        );
 
-    if session.awaiting_results.len() > 0 {
         // We are awaiting results from this session, but it's gone. So, send the results to the next session.
         server_channels
             .id_sender
@@ -297,6 +299,12 @@ async fn handle_websocket(
             .results_awaiting_sender
             .send(session.awaiting_results.clone())
             .unwrap();
+
+        log::info!(
+            "Forwaded awaiting result from {} (ID {}) to the next session.",
+            session.user.name,
+            session.user.id
+        );
     }
 }
 
@@ -374,7 +382,7 @@ async fn main(
 
     let mut state: bruty_share::types::ServerState = persist.load("server_state").unwrap();
 
-    let (id_sender, id_receiver) = flume::bounded(1); // Create a channel for when the current project ID changes.
+    let (id_sender, id_receiver) = flume::unbounded(); // Create a channel for when the current project ID changes.
     let (results_sender, results_receiver) = flume::unbounded(); // Create a channel for when the server receives results, to send to the result handler.
     let (results_awaiting_sender, results_awaiting_receiver) = flume::unbounded(); // Create a channel for when the server is awaiting results.
     let (results_received_sender, results_received_receiver) = flume::unbounded(); // Create a channel for when the server receives results.

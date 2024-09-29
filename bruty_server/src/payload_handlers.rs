@@ -196,8 +196,8 @@ pub async fn test_request(
     session.awaiting_results = id.clone(); // Set the awaiting results
 
     log::info!(
-        "Requesting test for {:?} from {} (ID {}), sending to {}.",
-        id,
+        "Requesting test for {} from {} (ID {}), sending to {}.",
+        id.iter().collect::<String>(),
         session.user.name,
         session.user.id,
         session.ip
@@ -292,8 +292,8 @@ pub async fn testing_result(
     }
 
     log::info!(
-        "Received results for {:?} from {} (ID {}), sent from {}.",
-        testing_result_data.id,
+        "Received results for {} from {} (ID {}), sent from {}.",
+        testing_result_data.id.iter().collect::<String>(),
         session.user.name,
         session.user.id,
         session.ip
