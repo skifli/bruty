@@ -20,8 +20,6 @@ const VALID_CHARS: &[char] = &[
 
 #[derive(Parser, Debug)]
 #[command(
-    version,
-    about,
     author = AUTHOR,
     version = VERSION,
     about = "Brute-forces the rest of a YouTube video ID when you have part of it"

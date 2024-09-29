@@ -1,3 +1,3 @@
 {
-    "postCreateCommand": "curl https://sh.rustup.rs -sSf | sh -s -- -y && rustup target add x86_64-pc-windows-gnu & sudo apt update && sudo apt-get install mingw-w64"
+    "postCreateCommand": "curl https://sh.rustup.rs -sSf | sh -s -- -y && rustup target add x86_64-pc-windows-gnu & sudo apt update && sudo apt-get install mingw-w64 && cargo install cargo-shuttle"
 }

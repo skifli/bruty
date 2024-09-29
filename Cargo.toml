@@ -1,16 +1,6 @@
-[package]
-name = "bruty"
-authors = ["skifli"]
-version = "0.2.0"
-edition = "2021"
-
-[dependencies]
-chrono = "0.4.38"
-clap = { version = "4.5.14", features = ["color", "derive"] }
-fern = { version = "0.6", features = ["colored"] }
-flume = "0.11.0"
-log = "0.4"
-reqwest = "0.12.5"
-serde = "1.0.205"
-sonic-rs = "0.3"
-tokio = { version = "1.39.2", features = ["full"]}
+[workspace]
+members = [
+    "./bruty_client/",
+    "./bruty_server/",
+    "./bruty_share"
+]

@@ -1,0 +1,17 @@
+[package]
+name = "bruty_client"
+authors = ["skifli"]
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bytes = "1.7.2"
+chrono = "0.4.38"
+clap = { version = "4.5.18", features = ["derive"] }
+futures-util = "0.3.30"
+log = "0.4"
+rmp-serde = "1.1.2"
+tokio = { version = "1.40.0", features = ["full"] }
+tokio-tungstenite = "0.24.0"
+
+bruty_share = { path = "../bruty_share" }
