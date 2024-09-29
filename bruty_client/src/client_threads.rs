@@ -14,8 +14,13 @@ pub async fn id_checker(
                     + &id.iter().collect::<String>(),
             )
             .send()
-            .await
-            .unwrap();
+            .await;
+
+        if response.is_err() {
+            continue;
+        }
+
+        let response = response.unwrap();
 
         match response.status().as_u16() {
             200 => {
