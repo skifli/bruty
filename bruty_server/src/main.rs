@@ -61,7 +61,7 @@ impl SplitSinkExt for WebSocketSender {
 /// * `server_channels` - The server's channels.
 ///
 /// # Returns
-/// * `bool` - Whether the connection was closed.
+/// * `bool` - Whether the connection shouldn't be closed.
 async fn handle_msg(
     websocket_sender: &mut WebSocketSender,
     msg: warp::ws::Message,
@@ -89,6 +89,8 @@ async fn handle_msg(
                 })
                 .await
                 .unwrap();
+
+            websocket_sender.close().await.unwrap();
 
             return true;
         }
@@ -138,6 +140,8 @@ async fn handle_msg(
                 })
                 .await
                 .unwrap();
+
+            websocket_sender.close().await.unwrap();
 
             return false;
         }
@@ -253,21 +257,21 @@ async fn handle_websocket(
 
     if abruptly_closed {
         log::warn!(
-            "Abruptly closed WebSocket connection with {} (ID {}), connected to {}.",
+            "WebSocket connection with {} (ID {}), connected from {} was abruptly closed.",
             session.user.name,
             session.user.id,
             session.ip
         );
     } else if manually_closed {
         log::info!(
-            "Manually closed WebSocket connection with {} (ID {}), connected to {}.",
+            "Manually closed WebSocket connection with {} (ID {}), connected from {}.",
             session.user.name,
             session.user.id,
             session.ip
         );
     } else {
         log::info!(
-            "Gracefully closed WebSocket connection with {} (ID {}), connected to {}.",
+            "Gracefully closed WebSocket connection with {} (ID {}), connected from {}.",
             session.user.name,
             session.user.id,
             session.ip
@@ -275,7 +279,7 @@ async fn handle_websocket(
     }
 
     log::info!(
-        "Cleaning up session for {} (ID {}), connected to {}.",
+        "Cleaning up session for {} (ID {}), connected from {}.",
         session.user.name,
         session.user.id,
         session.ip

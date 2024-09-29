@@ -73,22 +73,19 @@ impl ErrorCode {
             ErrorCode::DecodeError => InvalidSessionData {
                 code: ErrorCode::DecodeError,
                 description: "Decode error".to_string(),
-                explanation: "The server
-                received an invalid payload."
+                explanation: "The server received an invalid payload."
                     .to_string(),
             },
             ErrorCode::AuthenticationFailed => InvalidSessionData {
                 code: ErrorCode::AuthenticationFailed,
                 description: "Authentication failed".to_string(),
-                explanation: "The server
-                received an invalid passphrase."
+                explanation: "The server received an invalid passphrase."
                     .to_string(),
             },
             ErrorCode::UnsupportedClientVersion => InvalidSessionData {
                 code: ErrorCode::UnsupportedClientVersion,
                 description: "Unsupported client version".to_string(),
-                explanation: "The server
-                received a client version it doesn't support. Try updating your client from https://github.com/skifli/bruty/releases."
+                explanation: "The server received a client version it doesn't support. Try updating your client from https://github.com/skifli/bruty/releases."
                     .to_string(),
             },
             ErrorCode::NotAuthenticated => InvalidSessionData {
@@ -105,8 +102,7 @@ impl ErrorCode {
                 code: ErrorCode::ExpectingResults,
                 description: "Expecting results".to_string(),
                 explanation:
-                    "You need to send the results of the previous test before requesting a new one."
-                        .to_string(),
+                    "You need to send the results of the previous test before requesting a new one.".to_string(),
             },
             ErrorCode::WrongResultString => InvalidSessionData {
                 code: ErrorCode::WrongResultString,
@@ -146,11 +142,6 @@ pub struct IdentifyData {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
-pub struct RequestingTestData {
-    pub id: Vec<char>,
-}
-
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct TestingResultData {
     pub id: Vec<char>,
     pub positives: Vec<types::Video>,
@@ -160,8 +151,8 @@ pub struct TestingResultData {
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct InvalidSessionData {
     code: ErrorCode,
-    description: String,
-    explanation: String,
+    pub description: String,
+    pub explanation: String,
 }
 
 /// WebSocket payload data
@@ -169,7 +160,7 @@ pub struct InvalidSessionData {
 pub enum Data {
     Heartbeat,
     Identify(IdentifyData),
-    RequestingTest(RequestingTestData),
+    RequestingTest,
     TestingResult(TestingResultData),
     InvalidSession(InvalidSessionData),
 }

@@ -1,3 +1,5 @@
+use std::f32::consts::E;
+
 use bruty_share;
 use chrono;
 use clap::Parser;
@@ -23,12 +25,6 @@ pub type WebSocketSender = futures_util::stream::SplitSink<
 
 /// An extension trait for `SplitSink` that adds methods for sending payloads and closing the connection.
 pub trait SplitSinkExt {
-    /// Closes the WebSocket connection.
-    ///
-    /// # Returns
-    /// * `Result` - A `Result` indicating success or failure.
-    fn close(&mut self) -> impl std::future::Future<Output = Result> + Send;
-
     /// Sends a payload to the WebSocket connection.
     ///
     /// # Arguments
@@ -43,11 +39,6 @@ pub trait SplitSinkExt {
 }
 
 impl SplitSinkExt for WebSocketSender {
-    async fn close(&mut self) -> Result {
-        self.send(tokio_tungstenite::tungstenite::Message::Close(None))
-            .await
-    }
-
     async fn send_payload(&mut self, payload: bruty_share::Payload) -> Result {
         // Convert payload to binary and send it
         self.send(tokio_tungstenite::tungstenite::Message::Binary(
@@ -69,6 +60,74 @@ struct Args {
 
     /// The secret used for authentication.
     secret: String,
+}
+
+/// Handles a WebSocket message.
+///
+/// # Arguments
+/// * `websocket_sender` - The WebSocket sender.
+/// * `msg` - The WebSocket message.
+///
+/// # Returns
+/// * `bool` - Whether the connection shouldn't be closed.
+async fn handle_msg(websocket_sender: &mut WebSocketSender, msg: Message) -> bool {
+    let payload: bruty_share::Payload = match rmp_serde::from_read(msg.into_data().as_slice()) {
+        Ok(payload) => payload,
+        Err(err) => {
+            log::error!("Failed to deserialize payload: {}", err);
+
+            return false;
+        }
+    };
+
+    match payload.op_code {
+        bruty_share::OperationCode::InvalidSession => {
+            // The session is invalid
+            let error_code = match payload.data {
+                bruty_share::Data::InvalidSession(error_code) => error_code,
+                _ => {
+                    log::error!("InvalidSession payload data is not an error code");
+
+                    return false;
+                }
+            };
+
+            log::error!(
+                "Invalid session: {} - {}",
+                error_code.description,
+                error_code.explanation
+            );
+
+            return false;
+        }
+        bruty_share::OperationCode::Heartbeat => {
+            // We should never receive these from the client
+            // Likely a bug, so we are going to close the connection
+            log::warn!("Received unexpected OP code, closing connection");
+
+            websocket_sender
+                .send_payload(bruty_share::Payload {
+                    op_code: bruty_share::OperationCode::InvalidSession,
+                    data: bruty_share::Data::InvalidSession(
+                        bruty_share::ErrorCode::UnexpectedOP.populate(),
+                    ),
+                })
+                .await
+                .unwrap();
+
+            websocket_sender.close().await.unwrap();
+
+            return false;
+        }
+        _ => {
+            // Invalid OP code received
+            // However, since it's in the enum, we probably should be handling it... so it's likely TODO
+
+            todo!("Invalid OP code received");
+        }
+    }
+
+    return true;
 }
 
 /// Handles a WebSocket connection.
@@ -96,21 +155,15 @@ async fn handle_connection(
         .await
         .unwrap(); // Identify to the server
 
-    tokio::spawn(async move {
-        loop {
-            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    websocket_sender
+        .send_payload(bruty_share::Payload {
+            op_code: bruty_share::OperationCode::RequestingTest,
+            data: bruty_share::Data::RequestingTest,
+        })
+        .await
+        .unwrap(); // Request a test
 
-            websocket_sender
-                .send_payload(bruty_share::Payload {
-                    op_code: bruty_share::OperationCode::Heartbeat,
-                    data: bruty_share::Data::Heartbeat,
-                })
-                .await
-                .unwrap(); // Send a heartbeat to the server
-
-            log::debug!("Sent heartbeat");
-        }
-    }); // Create heartbeat sender
+    let mut heartbeat_interval = tokio::time::interval(std::time::Duration::from_secs(3));
 
     loop {
         tokio::select! {
@@ -128,6 +181,30 @@ async fn handle_connection(
                         return;
                     }
                 };
+
+                if msg.is_binary() {
+                    // Binary WebSocket message received
+                    if !handle_msg(&mut websocket_sender, msg).await {
+                        return;
+                    }
+                } else if msg.is_close() {
+                    // Client requested to close the connection
+                    break;
+                } else {
+                    // Invalid WebSocket message type received
+                    // We don't care about text, ping, pong, etc.
+
+                    log::warn!("Invalid WebSocket message type received (expected binary)");
+                    continue;
+                }
+            }
+            _ = heartbeat_interval.tick() => {
+                websocket_sender .send_payload(bruty_share::Payload {
+                    op_code: bruty_share::OperationCode::Heartbeat,
+                    data: bruty_share::Data::Heartbeat,
+                }).await.unwrap(); // Send a heartbeat to the server
+
+                log::debug!("Sent heartbeat");
             }
         }
     }
@@ -169,7 +246,7 @@ async fn create_connection(remote_url: &str, id: i16, secret: String) {
 #[tokio::main]
 async fn main() {
     let args: Args = Args::parse();
-    let remote_url = "ws://bruty.shuttle.dev/ivocord";
+    let remote_url = "wss://bruty.shuttleapp.rs/ivocord";
 
     log::info!("Bruty Client v{} by {}.", VERSION, AUTHOR);
 
