@@ -119,7 +119,6 @@ async fn handle_msg(
                 payload_send_sender,
                 id_sender,
                 positives_receiver,
-                reqwest_client,
                 payload,
             )
             .await;

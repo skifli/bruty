@@ -15,7 +15,6 @@ pub async fn test_request_data(
     payload_send_sender: &flume::Sender<bruty_share::Payload>,
     id_sender: &flume::Sender<Vec<char>>,
     positives_receiver: &flume::Receiver<bruty_share::types::Video>,
-    reqwest_client: &reqwest::Client,
     payload: bruty_share::Payload,
 ) {
     let test_request_data = match payload.data {

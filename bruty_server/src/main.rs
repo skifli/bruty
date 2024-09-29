@@ -373,6 +373,24 @@ async fn main(
 
     log::info!("Bruty Server v{} by {}.", VERSION, AUTHOR);
 
+    persist
+        .save(
+            "users",
+            vec![
+                bruty_share::types::User {
+                    id: 0,
+                    name: "skifli".to_string(),
+                    secret: "1cwkj3".to_string(),
+                },
+                bruty_share::types::User {
+                    id: 1,
+                    name: "duvox".to_string(),
+                    secret: "acw34".to_string(),
+                },
+            ],
+        )
+        .unwrap();
+
     let mut state: bruty_share::types::ServerState = persist.load("server_state").unwrap();
 
     let (id_sender, id_receiver) = flume::unbounded(); // Create a channel for when the current project ID changes.
