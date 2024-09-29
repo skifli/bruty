@@ -62,6 +62,14 @@ struct Args {
 
     /// The secret used for authentication.
     secret: String,
+
+    #[arg(
+        short = 't',
+        long = "threads",
+        help = "Number of threads to use",
+        default_value_t = 4096
+    )]
+    threads: u16,
 }
 
 /// Handles a WebSocket message.
@@ -166,6 +174,7 @@ async fn handle_connection(
         tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
     >,
     user: bruty_share::types::User,
+    threads: u16,
 ) {
     let (mut websocket_sender, mut websocket_receiver) = websocket_stream.split();
     let (payload_send_sender, payload_send_receiver) = flume::unbounded();
@@ -174,7 +183,7 @@ async fn handle_connection(
 
     let reqwest_client = reqwest::Client::new();
 
-    for _ in 0..4096 {
+    for _ in 0..threads {
         let id_receiver = id_receiver.clone();
         let reqwest_client = reqwest_client.clone();
         let positives_sender = positives_sender.clone();
@@ -262,7 +271,8 @@ async fn handle_connection(
 /// * `remote_url` - The URL of the server.
 /// * `id` - The id used for authentication.
 /// * `secret` - The secret used for authentication.
-async fn create_connection(remote_url: &str, id: i16, secret: String) {
+/// * `threads` - The number of threads to use.
+async fn create_connection(remote_url: &str, id: i16, secret: String, threads: u16) {
     let mut request = remote_url.into_client_request().unwrap();
     request
         .headers_mut()
@@ -285,6 +295,7 @@ async fn create_connection(remote_url: &str, id: i16, secret: String) {
             name: "unknown".to_string(),
             secret,
         },
+        threads,
     )
     .await;
 }
@@ -306,5 +317,5 @@ async fn main() {
 
     log::info!("Bruty Client v{} by {}.", VERSION, AUTHOR);
 
-    create_connection(remote_url, args.id, args.secret).await;
+    create_connection(remote_url, args.id, args.secret, args.threads).await;
 }

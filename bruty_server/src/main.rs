@@ -387,6 +387,16 @@ async fn main(
                     name: "duvox".to_string(),
                     secret: "acw34".to_string(),
                 },
+                bruty_share::types::User {
+                    id: 1,
+                    name: "gost".to_string(),
+                    secret: "32a;^%".to_string(),
+                },
+                bruty_share::types::User {
+                    id: 1,
+                    name: "finsanity".to_string(),
+                    secret: "wev;23".to_string(),
+                },
             ],
         )
         .unwrap();
