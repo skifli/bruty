@@ -1,7 +1,7 @@
 use crate::{SplitSinkExt, WebSocketSender};
 use futures_util::SinkExt;
 
-const ALLOWED_CLIENT_VERSIONS: &[&str] = &["0.1.0"];
+const ALLOWED_CLIENT_VERSIONS: &[&str] = &["0.1.1"];
 
 /// Checks if the connection is authenticated.
 /// If not, it sends an InvalidSession OP code and closes the connection.
@@ -46,7 +46,7 @@ async fn check_authenticated(
 /// * `session` - The session of the connection.
 pub async fn heartbeat(session: &mut bruty_share::types::Session) {
     session.heartbeat_received = true; // For the main loop, to update the heartbeat receiver timer.
-    session.heartbeat_timer = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+    session.heartbeat_timer = tokio::time::Instant::now() + std::time::Duration::from_secs(45);
 }
 
 /// Handles the Identify OP code.

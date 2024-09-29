@@ -212,7 +212,7 @@ async fn handle_connection(
         .await
         .unwrap(); // Request a test
 
-    let mut heartbeat_interval = tokio::time::interval(std::time::Duration::from_secs(3));
+    let mut heartbeat_interval = tokio::time::interval(std::time::Duration::from_secs(30));
 
     loop {
         tokio::select! {

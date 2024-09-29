@@ -350,7 +350,7 @@ fn handle_connection(
                     ip,
                     heartbeat_received: true,
                     heartbeat_timer: tokio::time::Instant::now()
-                        + tokio::time::Duration::from_secs(5),
+                        + tokio::time::Duration::from_secs(45),
                     user: bruty_share::types::User {
                         id: 0,
                         name: "unknown".to_string(),
