@@ -119,6 +119,12 @@ async fn handle_msg(
                 error_code.explanation
             );
 
+            if error_code.code == bruty_share::ErrorCode::UnsupportedClientVersion {
+                log::error!("Unsupported client version, please update");
+
+                std::process::exit(1);
+            }
+
             return false;
         }
         bruty_share::OperationCode::TestRequestData => {

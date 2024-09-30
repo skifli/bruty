@@ -11,7 +11,7 @@ pub const VALID_CHARS: &[char] = &[
 ];
 
 /// Error codes sent with an InvalidSession OP code
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
 pub enum ErrorCode {
     UnknownError,
     UnexpectedOP,
@@ -122,7 +122,7 @@ pub struct TestingResultData {
 /// Data sent with an InvalidSession OP code
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct InvalidSessionData {
-    code: ErrorCode,
+    pub code: ErrorCode,
     pub description: String,
     pub explanation: String,
 }
