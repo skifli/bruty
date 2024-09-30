@@ -15,7 +15,7 @@ mod payload_handlers;
 const AUTHOR: &str = env!("CARGO_PKG_AUTHORS");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-// Type aliases to save my sanity
+// Type aliases to save my sanity, lol
 pub type Message = tokio_tungstenite::tungstenite::Message;
 pub type Result = tokio_tungstenite::tungstenite::Result<()>;
 
