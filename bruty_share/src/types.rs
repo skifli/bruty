@@ -1,5 +1,5 @@
 /// Represents the server's state.
-#[derive(Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, std::fmt::Display, serde::Deserialize, serde::Serialize)]
 pub struct ServerState {
     pub current_id: Vec<char>,
     pub starting_id: Vec<char>,

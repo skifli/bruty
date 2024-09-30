@@ -36,6 +36,7 @@ jobs:
       - uses: taiki-e/upload-rust-binary-action@v1
         with:
           manifest-path: ./bruty_client/Cargo.toml
+          include: LICENSE,README.md
           # (required) Comma-separated list of binary names (non-extension portion of filename) to build and upload.
           # Note that glob pattern is not supported yet.
           bin: bruty_client

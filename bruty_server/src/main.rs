@@ -338,6 +338,8 @@ async fn main(
 
     let mut state: bruty_share::types::ServerState = persist.load("server_state").unwrap();
 
+    log::info!("Server State: {:?}", state);
+
     let (id_sender, id_receiver) = flume::unbounded(); // Create a channel for when the current project ID changes.
     let (results_sender, results_receiver) = flume::unbounded(); // Create a channel for when the server receives results, to send to the result handler.
     let (results_awaiting_sender, results_awaiting_receiver) = flume::unbounded(); // Create a channel for when the server is awaiting results.
