@@ -46,10 +46,10 @@ pub async fn id_checker(
                         })
                         .unwrap();
                 }
-                404 => break,
+                404 | 400 => break,
                 _ => {
                     log::warn!(
-                        "Error occured while checking ID: {}",
+                        "Error occurred while checking ID: {}",
                         id.iter().collect::<String>()
                     );
                 }
