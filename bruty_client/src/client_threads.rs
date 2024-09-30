@@ -8,44 +8,53 @@ pub async fn id_checker(
     loop {
         let id = id_receiver.recv_async().await.unwrap(); // Await an ID to check
 
-        let response = reqwest_client
-            .get(
-                "https://www.youtube.com/oembed?url=http://www.youtube.com/watch?v=".to_string()
-                    + &id.iter().collect::<String>(),
-            )
-            .send()
-            .await;
+        loop {
+            let response = reqwest_client
+                .get(
+                    "https://www.youtube.com/oembed?url=http://www.youtube.com/watch?v="
+                        .to_string()
+                        + &id.iter().collect::<String>(),
+                )
+                .send()
+                .await;
 
-        if response.is_err() {
-            continue;
+            if response.is_err() {
+                continue;
+            }
+
+            let response = response.unwrap();
+
+            match response.status().as_u16() {
+                200 => {
+                    let video_data: bruty_share::types::VideoData =
+                        sonic_rs::from_str(&response.text().await.unwrap()).unwrap();
+
+                    positives_sender
+                        .send(bruty_share::types::Video {
+                            event: bruty_share::types::VideoEvent::Success,
+                            id: id.clone(),
+                            video_data: Some(video_data),
+                        })
+                        .unwrap();
+                }
+                401 => {
+                    positives_sender
+                        .send(bruty_share::types::Video {
+                            event: bruty_share::types::VideoEvent::NotEmbeddable,
+                            id: id.clone(),
+                            video_data: None,
+                        })
+                        .unwrap();
+                }
+                404 => break,
+                _ => {
+                    log::warn!(
+                        "Error occured while checking ID: {}",
+                        id.iter().collect::<String>()
+                    );
+                }
+            };
         }
-
-        let response = response.unwrap();
-
-        match response.status().as_u16() {
-            200 => {
-                let video_data: bruty_share::types::VideoData =
-                    sonic_rs::from_str(&response.text().await.unwrap()).unwrap();
-
-                positives_sender
-                    .send(bruty_share::types::Video {
-                        event: bruty_share::types::VideoEvent::Success,
-                        id: id.clone(),
-                        video_data: Some(video_data),
-                    })
-                    .unwrap();
-            }
-            401 => {
-                positives_sender
-                    .send(bruty_share::types::Video {
-                        event: bruty_share::types::VideoEvent::NotEmbeddable,
-                        id: id.clone(),
-                        video_data: None,
-                    })
-                    .unwrap();
-            }
-            _ => {}
-        };
     }
 }
 

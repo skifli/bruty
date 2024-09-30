@@ -306,5 +306,34 @@ async fn main() {
 
     log::info!("Bruty Client v{} by {}.", VERSION, AUTHOR);
 
-    create_connection(remote_url, args.id, args.secret, args.threads).await;
+    let server_status_client = reqwest::Client::new();
+
+    loop {
+        let req = server_status_client
+            .get("https://bruty.shuttleapp.rs/status")
+            .send()
+            .await;
+
+        let mut failed = false;
+
+        if req.is_err() {
+            failed = true;
+        } else {
+            let req = req.unwrap();
+
+            if req.status().as_u16() != 200 {
+                failed = true;
+            }
+        }
+
+        if failed {
+            log::warn!("Server status was not 200 (I am probably updating the logins). Retrying in 5 seconds.");
+
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        } else {
+            create_connection(remote_url, args.id, args.secret.clone(), args.threads).await;
+
+            log::warn!("Connection to server was lost, trying to connect again.")
+        }
+    }
 }

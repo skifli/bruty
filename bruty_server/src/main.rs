@@ -71,10 +71,9 @@ async fn handle_msg(
         Ok(payload) => payload,
         Err(err) => {
             log::error!(
-                "Failed to deserialize message from {} (ID {}), sent from {}: {}.",
+                "Failed to deserialize message from {} (ID {}): {}.",
                 session.user.name,
                 session.user.id,
-                session.ip,
                 err
             );
 
@@ -114,10 +113,9 @@ async fn handle_msg(
             // We should never receive these from the client
             // Likely a bug, so we are going to close the connection
             log::warn!(
-                "Received unexpected OP code from {} (ID {}), sent from {}.",
+                "Received unexpected OP code from {} (ID {}).",
                 session.user.name,
                 session.user.id,
-                session.ip
             );
 
             websocket_sender
@@ -158,7 +156,7 @@ async fn handle_websocket(
     persist: shuttle_persist::PersistInstance,
     server_channels: bruty_share::types::ServerChannels,
 ) {
-    log::info!("Established WebSocket connection with {}.", session.ip);
+    log::info!("Established WebSocket connection");
 
     let (mut websocket_sender, mut websocket_receiver) = websocket.split();
 
@@ -206,7 +204,7 @@ async fn handle_websocket(
                     // Invalid WebSocket message type received
                     // We don't care about text, ping, pong, etc.
 
-                    log::warn!("Invalid WebSocket message type received from {} (ID {}), sent from {}.", session.user.name, session.user.id, session.ip);
+                    log::warn!("Invalid WebSocket message type received from {} (ID {}).", session.user.name, session.user.id);
                     continue;
                 }
             }
@@ -215,35 +213,31 @@ async fn handle_websocket(
 
     if abruptly_closed {
         log::warn!(
-            "WebSocket connection with {} (ID {}), connected from {} was abruptly closed.",
+            "WebSocket connection with {} (ID {}) was abruptly closed.",
             session.user.name,
             session.user.id,
-            session.ip
         );
 
         websocket_sender.close().await.unwrap();
     } else if manually_closed {
         log::info!(
-            "Manually closed WebSocket connection with {} (ID {}), connected from {}.",
+            "Manually closed WebSocket connection with {} (ID {}).",
             session.user.name,
             session.user.id,
-            session.ip
         );
     } else {
         log::info!(
-            "Gracefully closed WebSocket connection with {} (ID {}), connected from {}.",
+            "Gracefully closed WebSocket connection with {} (ID {}).",
             session.user.name,
             session.user.id,
-            session.ip
         );
     }
 
     if !session.awaiting_results.is_empty() {
         log::info!(
-            "Cleaning up session for {} (ID {}), connected from {}.",
+            "Cleaning up session for {} (ID {}).",
             session.user.name,
             session.user.id,
-            session.ip
         );
 
         // We are awaiting results from this session, but it's gone. So, send the results to the next session.
@@ -272,7 +266,6 @@ async fn handle_websocket(
 /// * `persist` - The database connection.
 /// * `server_channels` - The server's channels.
 /// * `headers` - The headers of the request.
-/// * `addr` - The originator's IP address.
 ///
 /// # Returns
 /// * `impl warp::Reply` - The result of handling the connection.
@@ -281,24 +274,15 @@ fn handle_connection(
     persist: shuttle_persist::PersistInstance,
     server_channels: bruty_share::types::ServerChannels,
     headers: warp::http::HeaderMap,
-    addr: Option<std::net::SocketAddr>,
 ) -> impl warp::Reply {
     ws.on_upgrade(move |websocket| async move {
-        let ip = addr
-            .map(|a| a.ip().to_string())
-            .unwrap_or("unknown".to_string());
-
         let user_agent = headers
             .get("user-agent")
             .map(|ua| ua.to_str().unwrap())
             .unwrap_or("unknown");
 
         if user_agent != "bruty" {
-            log::info!(
-                "Rejected TCP connection from {} with user agent {}.",
-                ip,
-                user_agent
-            );
+            log::info!("Rejected TCP connection with user agent {}.", user_agent);
             websocket.close().await.unwrap();
         } else {
             handle_websocket(
@@ -306,7 +290,6 @@ fn handle_connection(
                 &mut bruty_share::types::Session {
                     authenticated: false,
                     awaiting_results: Vec::new(),
-                    ip,
                     user: bruty_share::types::User {
                         id: 0,
                         name: "unknown".to_string(),
@@ -324,38 +307,34 @@ fn handle_connection(
 #[shuttle_runtime::main]
 async fn main(
     #[shuttle_persist::Persist] persist: shuttle_persist::PersistInstance,
+    #[shuttle_runtime::Secrets] secrets: shuttle_runtime::SecretStore,
 ) -> shuttle_warp::ShuttleWarp<(impl warp::Reply,)> {
     bruty_share::logger::setup(true, None).unwrap(); // Setup logger without a file because we are in a server environment
 
     log::info!("Bruty Server v{} by {}.", VERSION, AUTHOR);
 
-    persist
-        .save(
-            "users",
-            vec![
-                bruty_share::types::User {
-                    id: 0,
-                    name: "skifli".to_string(),
-                    secret: "1cwkj3".to_string(),
-                },
-                bruty_share::types::User {
-                    id: 1,
-                    name: "duvox".to_string(),
-                    secret: "acw34a".to_string(),
-                },
-                bruty_share::types::User {
-                    id: 2,
-                    name: "gost".to_string(),
-                    secret: "32a;^%".to_string(),
-                },
-                bruty_share::types::User {
-                    id: 3,
-                    name: "finsanity".to_string(),
-                    secret: "wev;23".to_string(),
-                },
-            ],
-        )
-        .unwrap();
+    let users_vec: Vec<char> = secrets.get("USERS").unwrap().chars().collect();
+    let mut users = vec![];
+
+    for (index, user_id) in users_vec.iter().enumerate() {
+        let user_name = secrets.get(&format!("USER_{}_NAME", user_id)).unwrap();
+        let user_secret = secrets.get(&format!("USER_{}_SECRET", user_id)).unwrap();
+
+        users.push(bruty_share::types::User {
+            id: index as i16,
+            name: user_name,
+            secret: user_secret,
+        });
+    }
+
+    persist.save("users", users).unwrap();
+
+    log::info!(
+        "Users: {:?}",
+        persist
+            .load::<Vec<bruty_share::types::User>>("users")
+            .unwrap()
+    );
 
     let mut state: bruty_share::types::ServerState = persist.load("server_state").unwrap();
 
@@ -410,21 +389,23 @@ async fn main(
     });
 
     // Creates the WebSocket route
-    let routes = warp::path("ivocord")
+    let websocket = warp::path("ivocord")
         .and(warp::ws()) // Make the route a WebSocket route
         .and(warp::any().map(move || persist.clone())) // Clone the persist instance
         .and(warp::any().map(move || server_channels.clone())) // Clone the server's sender channels
         .and(warp::header::headers_cloned()) // Get the headers of the request
-        .and(warp::addr::remote()) // Get the originator's IP address
         .map(
             |ws: warp::ws::Ws,
              persist: shuttle_persist::PersistInstance,
              server_channels: bruty_share::types::ServerChannels,
-             headers: warp::http::HeaderMap,
-             addr: Option<std::net::SocketAddr>| {
-                handle_connection(ws, persist, server_channels, headers, addr)
+             headers: warp::http::HeaderMap| {
+                handle_connection(ws, persist, server_channels, headers)
             },
         ); // Handle the connection
+
+    let status = warp::path("status").map(|| warp::reply());
+
+    let routes = websocket.or(status);
 
     Ok(routes.boxed().into())
 }

@@ -55,7 +55,6 @@ pub struct ServerChannels {
 pub struct Session {
     pub authenticated: bool,
     pub awaiting_results: Vec<char>,
-    pub ip: String,
     pub user: User,
 }
 

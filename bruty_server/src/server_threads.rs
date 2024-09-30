@@ -82,8 +82,6 @@ pub async fn results_progress_handler(
         let current_id_receiver_try = current_id_receiver.try_recv();
 
         if let Ok(id) = current_id_receiver_try {
-            log::info!("Received Current ID: {}", id.iter().collect::<String>());
-
             awaiting_current_id_update = id; // Get the current ID
         }
 
@@ -106,9 +104,22 @@ pub async fn results_progress_handler(
             // Only want to update current ID when all awaiting IDs start with current ID.
             // This means that we are not waiting for any results from the previous current ID.
 
-            if awaiting_results.iter().all(|x| {
-                x.starts_with(&awaiting_current_id_update)
-                // Doesn't work with later IDs though. E.g., if the list has 'Aca' and we are trying to update to 'Ab', it won't work.
+            if awaiting_results.iter().all(|testing_id| {
+                for (index, chr) in awaiting_current_id_update.iter().enumerate() {
+                    if bruty_share::VALID_CHARS
+                        .iter()
+                        .position(|&checking_chr| checking_chr == *chr)
+                        .unwrap()
+                        > bruty_share::VALID_CHARS
+                            .iter()
+                            .position(|&checking_chr| checking_chr == testing_id[index])
+                            .unwrap()
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
             }) {
                 state.current_id = awaiting_current_id_update.clone(); // Update the current ID
                 persist
@@ -122,7 +133,7 @@ pub async fn results_progress_handler(
                     .unwrap(); // Save the current ID to the database
 
                 log::info!(
-                    "Current ID updated to {}",
+                    "Updating current ID to {}",
                     awaiting_current_id_update.iter().collect::<String>()
                 );
                 awaiting_current_id_update.clear(); // Clear the current ID

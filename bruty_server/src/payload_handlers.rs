@@ -1,7 +1,7 @@
 use crate::{SplitSinkExt, WebSocketSender};
 use futures_util::SinkExt;
 
-const ALLOWED_CLIENT_VERSIONS: &[&str] = &["0.1.2"];
+const ALLOWED_CLIENT_VERSIONS: &[&str] = &["0.2.0"];
 
 /// Checks if the connection is authenticated.
 /// If not, it sends an InvalidSession OP code and closes the connection.
@@ -17,10 +17,7 @@ async fn check_authenticated(
     session: &bruty_share::types::Session,
 ) -> bool {
     if !session.authenticated {
-        log::warn!(
-            "Unauthenticated request from {}, closing connection.", // At this point we don't know who the user is
-            session.ip,
-        );
+        log::warn!("Unauthenticated request, closing connection.");
 
         websocket_sender
             .send_payload(bruty_share::Payload {
@@ -62,10 +59,7 @@ pub async fn identify(
     let identify_data = if let bruty_share::Data::Identify(data) = payload.data {
         data // Unwraps the IdentifyData directly
     } else {
-        log::warn!(
-            "Invalid payload data for Identify OP code, sent from {}.",
-            session.ip
-        );
+        log::warn!("Invalid payload data for Identify OP code");
         websocket_sender
             .send_payload(bruty_share::Payload {
                 op_code: bruty_share::OperationCode::InvalidSession,
@@ -82,9 +76,8 @@ pub async fn identify(
 
     if !ALLOWED_CLIENT_VERSIONS.contains(&&*identify_data.client_version) {
         log::warn!(
-            "Unsupported client version {} from {}, closing connection.",
+            "Unsupported client version {}, closing connection.",
             identify_data.client_version,
-            session.ip
         );
 
         websocket_sender
@@ -108,20 +101,12 @@ pub async fn identify(
             session.authenticated = true;
             session.user = user.clone(); // Clone the user into the session
         } else {
-            log::warn!(
-                "User {} authentication failed, sent from {}.",
-                user.name,
-                session.ip
-            );
+            log::warn!("User {} authentication failed.", user.name,);
 
             authentication_failed = true;
         }
     } else {
-        log::warn!(
-            "User {} not found, sent from {}.",
-            identify_data.id,
-            session.ip
-        );
+        log::warn!("User {} not found.", identify_data.id,);
 
         authentication_failed = true;
     }
@@ -142,10 +127,9 @@ pub async fn identify(
     }
 
     log::info!(
-        "User {} (ID {}) authenticated, from {}.",
+        "User {} (ID {}) authenticated.",
         session.user.name,
         session.user.id,
-        session.ip
     );
 
     session.authenticated = true;
@@ -231,10 +215,9 @@ pub async fn testing_result(
         data
     } else {
         log::warn!(
-            "Invalid payload data for TestingResult OP code from {} (ID {}), sent from {}.",
+            "Invalid payload data for TestingResult OP code from {} (ID {}).",
             session.user.name,
             session.user.id,
-            session.ip
         );
         websocket_sender
             .send_payload(bruty_share::Payload {
