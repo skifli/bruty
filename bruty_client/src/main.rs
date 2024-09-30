@@ -333,7 +333,8 @@ async fn main() {
         } else {
             create_connection(remote_url, args.id, args.secret.clone(), args.threads).await;
 
-            log::warn!("Connection to server was lost, trying to connect again.")
+            log::warn!("Connection to server was lost, trying to connect again in 5 seconds.");
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         }
     }
 }
