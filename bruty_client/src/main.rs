@@ -67,7 +67,7 @@ struct Args {
         short = 't',
         long = "threads",
         help = "Number of threads to use",
-        default_value_t = 4096
+        default_value_t = 100
     )]
     threads: u16,
 }
