@@ -5,8 +5,6 @@ on:
   push:
     tags-ignore:
       - "bruty-*"
-    paths:
-      - 'bruty_client/**'
 
 permissions:
     contents: write
