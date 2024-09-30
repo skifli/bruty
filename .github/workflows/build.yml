@@ -37,7 +37,7 @@ jobs:
           command: ${{ matrix.platform.command }}
           target: ${{ matrix.platform.target }}
           working-directory: ./bruty_client
-          args: "--locked --release"
+          args: "--release"
           strip: true
       - name: Publish artifacts and release
         uses: houseabsolute/actions-rust-release@v0

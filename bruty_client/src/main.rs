@@ -25,7 +25,7 @@ pub type WebSocketSender = futures_util::stream::SplitSink<
     tokio_tungstenite::tungstenite::Message,
 >;
 
-/// An extension trait for `SplitSink` that adds methods for sending payloads and closing the connection.
+/// An extension trait for `SplitSink` that adds methods for sending payloads, and closing the connection.
 pub trait SplitSinkExt {
     /// Sends a payload to the WebSocket connection.
     ///
