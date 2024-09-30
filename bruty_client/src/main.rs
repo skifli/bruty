@@ -19,7 +19,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub type Message = tokio_tungstenite::tungstenite::Message;
 pub type Result = tokio_tungstenite::tungstenite::Result<()>;
 
-// Mainly for this one lol
+// Mainly for this one, lol
 pub type WebSocketSender = futures_util::stream::SplitSink<
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
     tokio_tungstenite::tungstenite::Message,
