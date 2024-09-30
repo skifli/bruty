@@ -106,16 +106,20 @@ pub async fn results_progress_handler(
 
             if awaiting_results.iter().all(|testing_id| {
                 for (index, chr) in awaiting_current_id_update.iter().enumerate() {
-                    if bruty_share::VALID_CHARS
+                    let awaiting_char_position = bruty_share::VALID_CHARS
                         .iter()
                         .position(|&checking_chr| checking_chr == *chr)
-                        .unwrap()
-                        > bruty_share::VALID_CHARS
-                            .iter()
-                            .position(|&checking_chr| checking_chr == testing_id[index])
-                            .unwrap()
-                    {
+                        .unwrap();
+
+                    let testing_char_position = bruty_share::VALID_CHARS
+                        .iter()
+                        .position(|&checking_chr| checking_chr == testing_id[index])
+                        .unwrap();
+
+                    if awaiting_char_position > testing_char_position {
                         return false;
+                    } else if awaiting_char_position != testing_char_position {
+                        return true;
                     }
                 }
 
