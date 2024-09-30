@@ -316,16 +316,6 @@ async fn main(
     let users_vec: Vec<char> = secrets.get("USERS").unwrap().chars().collect();
     let mut users = vec![];
 
-    persist
-        .save(
-            "server_state",
-            bruty_share::types::ServerState {
-                current_id: vec!['M', 'w', 'b', 'C', 'a', 'a', 'e', 'u'],
-                starting_id: vec!['M', 'w', 'b', 'C'],
-            },
-        )
-        .unwrap();
-
     for (index, user_id) in users_vec.iter().enumerate() {
         let user_name = secrets.get(&format!("USER_{}_NAME", user_id)).unwrap();
         let user_secret = secrets.get(&format!("USER_{}_SECRET", user_id)).unwrap();
