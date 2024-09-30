@@ -36,6 +36,8 @@ pub async fn id_checker(
                             video_data: Some(video_data),
                         })
                         .unwrap();
+
+                    break;
                 }
                 401 => {
                     positives_sender
@@ -45,12 +47,25 @@ pub async fn id_checker(
                             video_data: None,
                         })
                         .unwrap();
+
+                    break;
                 }
-                404 | 400 => break,
+                404 | 400 => {
+                    positives_sender
+                        .send(bruty_share::types::Video {
+                            event: bruty_share::types::VideoEvent::NotFound,
+                            id: id.clone(),
+                            video_data: None,
+                        })
+                        .unwrap();
+
+                    break;
+                }
                 _ => {
                     log::warn!(
-                        "Error occurred while checking ID: {}",
-                        id.iter().collect::<String>()
+                        "Error occurred while checking ID: {} ({}). Retrying...",
+                        id.iter().collect::<String>(),
+                        response.status().as_u16()
                     );
                 }
             };

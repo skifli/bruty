@@ -18,10 +18,11 @@ pub struct UserEvent {
 }
 
 /// Represents what type of video event occurred.
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum VideoEvent {
     Success,
     NotEmbeddable,
+    NotFound,
 }
 
 /// Represents video data.

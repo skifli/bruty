@@ -44,34 +44,19 @@ pub async fn test_request_data(
 
         let mut positives = Vec::new();
 
-        while id_sender_clone.len() > 0 {
-            // IDs are still awaiting checking
-            match positives_receiver_clone.try_recv() {
-                Ok(video) => {
-                    positives.push(video);
-                }
-                Err(_) => {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                }
-            }
-        }
+        for _ in 0..4096 {
+            let video = positives_receiver_clone.recv().unwrap();
 
-        while positives_receiver_clone.len() > 0 {
-            // IDs are still awaiting checking
-            match positives_receiver_clone.try_recv() {
-                Ok(video) => {
-                    positives.push(video);
-                }
-                Err(_) => {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                }
+            if video.event != bruty_share::types::VideoEvent::NotFound {
+                // If it wasn't a not found
+                positives.push(video);
             }
         }
 
         let elapsed_time = start_time.elapsed().as_secs_f64();
 
         log::info!(
-            "Sending results for {} in {:.2}s ({:.2}/s)",
+            "Sending results for {} in {}s ({}/s)",
             test_request_data.id.iter().collect::<String>(),
             elapsed_time,
             4096.0 / elapsed_time
