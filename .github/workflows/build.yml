@@ -1,3 +1,13 @@
+name: Build and Release
+
+on:
+  push:
+    paths:
+      - 'bruty_client/**'
+
+permissions:
+    contents: write
+
 jobs:
   release:
     name: Release - ${{ matrix.platform.release_for }}
