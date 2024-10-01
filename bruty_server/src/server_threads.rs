@@ -154,6 +154,9 @@ pub async fn results_progress_handler(
                         "Can't update current ID to {}, awaiting {:?}",
                         cant_update.iter().collect::<String>(),
                         awaiting_results
+                            .iter()
+                            .map(|x| x.iter().collect::<String>())
+                            .collect::<Vec<String>>()
                     );
                 }
             }

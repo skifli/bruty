@@ -95,12 +95,11 @@ pub async fn test_request_data(
 
         let id_generator = IdGenerator::new(test_request_data.id.clone());
 
-        let futures = futures::stream::FuturesUnordered::new();
-
-        for id in id_generator {
+        let bodies = futures::stream::FuturesUnordered::from_iter(
+            id_generator.map(|id| {
             let client = &reqwest_client_clone;
     
-            futures.push(async move {
+            async move {
                 let id_vec = id.clone();
                 let id_str = id.iter().collect::<String>();
 
@@ -157,19 +156,20 @@ pub async fn test_request_data(
                         }
                     }
                 }
-            });
-        }
-    
-        let positives: Vec<_> = futures.filter_map(|result| async {
-            if let Some(video) = result {
-                match video.event {
-                    bruty_share::types::VideoEvent::Success | bruty_share::types::VideoEvent::NotEmbeddable => Some(video),
-                }
-            } else {
-                None
             }
-        }).collect().await;        
-    
+        }));
+
+        let positives = bodies
+            .filter_map(|video_option| async {
+            match video_option {
+                Some(video) => match video.event {
+                    bruty_share::types::VideoEvent::NotEmbeddable | bruty_share::types::VideoEvent::Success => Some(video),
+                },
+                None => None,
+            }
+            })
+            .collect::<Vec<bruty_share::types::Video>>()
+            .await;
 
         let elapsed_time = start_time.elapsed().as_secs_f64();
 

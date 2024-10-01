@@ -276,7 +276,7 @@ async fn create_connection(remote_url: &str, id: i16, secret: String) {
     .await;
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() {
     let args: Args = Args::parse();
     let remote_url = "wss://bruty.shuttleapp.rs/ivocord";
@@ -293,7 +293,10 @@ async fn main() {
 
     log::info!("Bruty Client v{} by {}.", VERSION, AUTHOR);
 
-    let server_status_client = reqwest::Client::new();
+    let server_status_client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_millis(100))
+        .build()
+        .unwrap();
 
     loop {
         let req = server_status_client
