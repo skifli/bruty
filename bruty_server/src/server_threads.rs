@@ -78,16 +78,16 @@ pub async fn results_progress_handler(
     let mut awaiting_results = Vec::new();
     let mut awaiting_current_id_update = Vec::new();
 
-    let mut cant_update = Vec::new();
+    let mut cant_update_awaiting_results = Vec::new();
 
     loop {
         let current_id_receiver_try = current_id_receiver.try_recv();
 
         if let Ok(id) = current_id_receiver_try {
             log::info!("Finished generating {}", id.iter().collect::<String>());
-            awaiting_current_id_update = id; // Get the current ID
 
-            cant_update.clear();
+            awaiting_current_id_update.push(id.clone());
+            cant_update_awaiting_results.clear();
         }
 
         let results_awaiting_receiver_try = results_awaiting_receiver.try_recv();
@@ -105,59 +105,67 @@ pub async fn results_progress_handler(
             awaiting_results.retain(|x| x != &id); // Remove the ID from the list of awaiting results
         }
 
-        if !awaiting_current_id_update.is_empty() {
-            // Only want to update current ID when all awaiting IDs start with current ID.
-            // This means that we are not waiting for any results from the previous current ID.
+        if awaiting_current_id_update.len() > 0 {
+            for (index, id) in awaiting_current_id_update.clone().iter().enumerate() {
+                // Only want to update current ID when all awaiting IDs start with current ID.
+                // This means that we are not waiting for any results from the previous current ID.
 
-            if awaiting_results.iter().all(|testing_id| {
-                for (index, chr) in awaiting_current_id_update.iter().enumerate() {
-                    let awaiting_char_position = bruty_share::VALID_CHARS
-                        .iter()
-                        .position(|&checking_chr| checking_chr == *chr)
-                        .unwrap();
-
-                    let testing_char_position = bruty_share::VALID_CHARS
-                        .iter()
-                        .position(|&checking_chr| checking_chr == testing_id[index])
-                        .unwrap();
-
-                    if awaiting_char_position > testing_char_position {
-                        return false;
-                    } else if awaiting_char_position != testing_char_position {
-                        return true;
-                    }
-                }
-
-                return true;
-            }) {
-                state.current_id = awaiting_current_id_update.clone(); // Update the current ID
-                persist
-                    .save(
-                        "server_state",
-                        bruty_share::types::ServerState {
-                            current_id: state.current_id.clone(),
-                            starting_id: state.starting_id.clone(),
-                        },
-                    )
-                    .unwrap(); // Save the current ID to the database
-
-                log::info!(
-                    "Finished checking {}",
-                    awaiting_current_id_update.iter().collect::<String>()
-                );
-                awaiting_current_id_update.clear(); // Clear the current ID
-            } else {
-                if cant_update.is_empty() {
-                    cant_update = awaiting_current_id_update.clone();
-
-                    log::warn!(
-                        "Can't update current ID to {}, awaiting {:?}",
-                        cant_update.iter().collect::<String>(),
-                        awaiting_results
+                if awaiting_results.iter().all(|testing_id| {
+                    for (index, chr) in id.iter().enumerate() {
+                        let awaiting_char_position = bruty_share::VALID_CHARS
                             .iter()
-                            .map(|x| x.iter().collect::<String>())
-                            .collect::<Vec<String>>()
+                            .position(|&checking_chr| checking_chr == *chr)
+                            .unwrap();
+
+                        let testing_char_position = bruty_share::VALID_CHARS
+                            .iter()
+                            .position(|&checking_chr| checking_chr == testing_id[index])
+                            .unwrap();
+
+                        if awaiting_char_position > testing_char_position {
+                            return false;
+                        } else if awaiting_char_position != testing_char_position {
+                            return true;
+                        }
+                    }
+
+                    return true;
+                }) {
+                    state.current_id = awaiting_current_id_update.remove(0);
+
+                    persist
+                        .save(
+                            "server_state",
+                            bruty_share::types::ServerState {
+                                current_id: state.current_id.clone(),
+                                starting_id: state.starting_id.clone(),
+                            },
+                        )
+                        .unwrap(); // Save the current ID to the database
+
+                    log::info!(
+                        "Finished checking {}",
+                        state.current_id.iter().collect::<String>()
                     );
+                } else {
+                    if cant_update_awaiting_results != awaiting_results {
+                        log::warn!(
+                            "Can't update current ID to {:?}[{}], awaiting {:?}",
+                            awaiting_current_id_update
+                                .iter()
+                                .map(|x| x.iter().collect::<String>())
+                                .collect::<Vec<String>>(),
+                            index,
+                            awaiting_results
+                                .iter()
+                                .map(|x| x.iter().collect::<String>())
+                                .collect::<Vec<String>>()
+                        );
+
+                        cant_update_awaiting_results = awaiting_results.clone();
+                    }
+
+                    break;
                 }
             }
         }
