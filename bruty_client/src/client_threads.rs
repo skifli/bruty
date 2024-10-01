@@ -28,11 +28,8 @@ pub async fn id_checker(
                 .await;
 
             if response.is_err() {
-                log::warn!(
-                    "Error occurred while requesting {} check ({}).",
-                    id_str,
-                    response.as_ref().unwrap_err()
-                );
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
                 continue;
             }
 
