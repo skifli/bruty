@@ -78,15 +78,16 @@ pub async fn results_progress_handler(
     let mut awaiting_results = Vec::new();
     let mut awaiting_current_id_update = Vec::new();
 
+    let mut cant_update = Vec::new();
+
     loop {
         let current_id_receiver_try = current_id_receiver.try_recv();
 
         if let Ok(id) = current_id_receiver_try {
-            log::info!(
-                "Received current ID update: {}",
-                id.iter().collect::<String>()
-            );
+            log::info!("Finished generating {}", id.iter().collect::<String>());
             awaiting_current_id_update = id; // Get the current ID
+
+            cant_update.clear();
         }
 
         let results_awaiting_receiver_try = results_awaiting_receiver.try_recv();
@@ -141,10 +142,20 @@ pub async fn results_progress_handler(
                     .unwrap(); // Save the current ID to the database
 
                 log::info!(
-                    "Updating current ID to {}",
+                    "Finished checking {}",
                     awaiting_current_id_update.iter().collect::<String>()
                 );
                 awaiting_current_id_update.clear(); // Clear the current ID
+            } else {
+                if cant_update.is_empty() {
+                    cant_update = awaiting_current_id_update.clone();
+
+                    log::warn!(
+                        "Can't update current ID to {}, awaiting {:?}",
+                        cant_update.iter().collect::<String>(),
+                        awaiting_results
+                    );
+                }
             }
         }
     }

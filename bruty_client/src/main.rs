@@ -9,7 +9,6 @@ use tokio;
 use tokio_tungstenite;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
-mod client_threads;
 mod payload_handlers;
 
 const AUTHOR: &str = env!("CARGO_PKG_AUTHORS");
@@ -62,14 +61,6 @@ struct Args {
 
     /// The secret used for authentication.
     secret: String,
-
-    #[arg(
-        short = 't',
-        long = "threads",
-        help = "Number of threads to use",
-        default_value_t = 100
-    )]
-    threads: u16,
 }
 
 /// Handles a WebSocket message.
@@ -77,8 +68,6 @@ struct Args {
 /// # Arguments
 /// * `websocket_sender` - The WebSocket sender.
 /// * `payload_send_sender` - The sender for sending payloads.
-/// * `id_sender` - The sender for sending IDs.
-/// * `positives_receiver` - The receiver for receiving positive video IDs.
 /// * `reqwest_client` - The reqwest client.
 /// * `msg` - The WebSocket message.
 ///
@@ -87,8 +76,7 @@ struct Args {
 async fn handle_msg(
     websocket_sender: &mut WebSocketSender,
     payload_send_sender: &flume::Sender<bruty_share::Payload>,
-    id_sender: &flume::Sender<Vec<char>>,
-    positives_receiver: &flume::Receiver<bruty_share::types::Video>,
+    reqwest_client: &reqwest::Client,
     msg: Message,
 ) -> bool {
     let payload: bruty_share::Payload = match rmp_serde::from_read(msg.into_data().as_slice()) {
@@ -123,6 +111,10 @@ async fn handle_msg(
                 log::error!("Unsupported client version, please update");
 
                 std::process::exit(1);
+            } else if error_code.code == bruty_share::ErrorCode::AuthenticationFailed {
+                log::error!("Authentication failed, please check your ID and secret");
+
+                std::process::exit(1);
             }
 
             return false;
@@ -131,8 +123,7 @@ async fn handle_msg(
             payload_handlers::test_request_data(
                 websocket_sender,
                 payload_send_sender,
-                id_sender,
-                positives_receiver,
+                reqwest_client,
                 payload,
             )
             .await;
@@ -179,24 +170,11 @@ async fn handle_connection(
         tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
     >,
     user: bruty_share::types::User,
-    threads: u16,
 ) {
     let (mut websocket_sender, mut websocket_receiver) = websocket_stream.split();
     let (payload_send_sender, payload_send_receiver) = flume::unbounded();
-    let (id_sender, id_receiver) = flume::unbounded();
-    let (positives_sender, positives_receiver) = flume::unbounded();
 
     let reqwest_client = reqwest::Client::new();
-
-    for _ in 0..threads {
-        let id_receiver = id_receiver.clone();
-        let reqwest_client = reqwest_client.clone();
-        let positives_sender = positives_sender.clone();
-
-        tokio::spawn(async move {
-            client_threads::id_checker(&id_receiver, &reqwest_client, &positives_sender).await;
-        });
-    }
 
     websocket_sender
         .send_payload(bruty_share::Payload {
@@ -210,13 +188,18 @@ async fn handle_connection(
         .await
         .unwrap(); // Identify to the server
 
-    websocket_sender
-        .send_payload(bruty_share::Payload {
-            op_code: bruty_share::OperationCode::TestRequest,
-            data: bruty_share::Data::TestRequest,
-        })
-        .await
-        .unwrap(); // Request a test
+    let payload_send_sender_clone = payload_send_sender.clone();
+
+    tokio::spawn(async move {
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+        payload_send_sender_clone
+            .send(bruty_share::Payload {
+                op_code: bruty_share::OperationCode::TestRequest,
+                data: bruty_share::Data::TestRequest,
+            })
+            .unwrap();
+    }); // In another thread so we terminate before if we are on an old client version.
 
     loop {
         tokio::select! {
@@ -237,7 +220,7 @@ async fn handle_connection(
 
                 if msg.is_binary() {
                     // Binary WebSocket message received
-                    if !handle_msg(&mut websocket_sender, &payload_send_sender, &id_sender, &positives_receiver, msg).await {
+                    if !handle_msg(&mut websocket_sender, &payload_send_sender, &reqwest_client, msg).await {
                         return;
                     }
                 } else if msg.is_close() {
@@ -266,8 +249,7 @@ async fn handle_connection(
 /// * `remote_url` - The URL of the server.
 /// * `id` - The id used for authentication.
 /// * `secret` - The secret used for authentication.
-/// * `threads` - The number of threads to use.
-async fn create_connection(remote_url: &str, id: i16, secret: String, threads: u16) {
+async fn create_connection(remote_url: &str, id: i16, secret: String) {
     let mut request = remote_url.into_client_request().unwrap();
     request
         .headers_mut()
@@ -290,7 +272,6 @@ async fn create_connection(remote_url: &str, id: i16, secret: String, threads: u
             name: "unknown".to_string(),
             secret,
         },
-        threads,
     )
     .await;
 }
@@ -337,7 +318,7 @@ async fn main() {
 
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         } else {
-            create_connection(remote_url, args.id, args.secret.clone(), args.threads).await;
+            create_connection(remote_url, args.id, args.secret.clone()).await;
 
             log::warn!("Connection to server was lost, trying to connect again in 5 seconds.");
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;

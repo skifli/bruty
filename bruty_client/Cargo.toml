@@ -1,7 +1,7 @@
 [package]
 name = "bruty_client"
 authors = ["skifli"]
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
 
 [dependencies]
@@ -9,6 +9,7 @@ bytes = "1.7.2"
 chrono = "0.4.38"
 clap = { version = "4.5.18", features = ["derive"] }
 flume = "0.11.0"
+futures = "0.3.30"
 futures-util = "0.3.30"
 log = "0.4"
 reqwest = "0.12.7"
