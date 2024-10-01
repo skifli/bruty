@@ -148,7 +148,7 @@ pub async fn results_progress_handler(
                         state.current_id.iter().collect::<String>()
                     );
                 } else {
-                    if cant_update_awaiting_results != awaiting_results {
+                    if cant_update_awaiting_results != awaiting_current_id_update {
                         log::warn!(
                             "Can't update current ID to {:?}[{}], awaiting {:?}",
                             awaiting_current_id_update
@@ -162,7 +162,7 @@ pub async fn results_progress_handler(
                                 .collect::<Vec<String>>()
                         );
 
-                        cant_update_awaiting_results = awaiting_results.clone();
+                        cant_update_awaiting_results = awaiting_current_id_update.clone();
                     }
 
                     break;
