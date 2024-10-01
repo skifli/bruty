@@ -221,6 +221,17 @@ async fn handle_connection(
                 data: bruty_share::Data::TestRequest,
             })
             .unwrap();
+
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+
+            payload_send_sender_clone
+                .send(bruty_share::Payload {
+                    op_code: bruty_share::OperationCode::Heartbeat,
+                    data: bruty_share::Data::Heartbeat,
+                })
+                .unwrap();
+        }
     }); // In another thread so we terminate before if we are on an old client version.
 
     loop {

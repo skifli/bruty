@@ -95,6 +95,9 @@ async fn handle_msg(
 
     #[allow(unreachable_patterns)]
     match payload.op_code {
+        bruty_share::OperationCode::Heartbeat => {
+            session.heartbeat_received = true;
+        }
         bruty_share::OperationCode::Identify => {
             // Identifies the client
             payload_handlers::identify(websocket_sender, payload, session, persist).await;
@@ -163,6 +166,10 @@ async fn handle_websocket(
     let mut abruptly_closed = false;
     let mut manually_closed = false;
 
+    let mut heartbeat_timer = Box::pin(tokio::time::sleep_until(
+        tokio::time::Instant::now() + tokio::time::Duration::from_secs(10),
+    ));
+
     loop {
         tokio::select! {
             result = websocket_receiver.next() => {
@@ -207,6 +214,34 @@ async fn handle_websocket(
                     log::warn!("Invalid WebSocket message type received from {} (ID {}).", session.user.name, session.user.id);
                     continue;
                 }
+            }
+            _ = &mut heartbeat_timer => {
+                if !session.heartbeat_received {
+                    // The client didn't send a heartbeat in time
+                    log::warn!("Heartbeat not received from {} (ID {}).", session.user.name, session.user.id);
+
+                    websocket_sender
+                        .send_payload(bruty_share::Payload {
+                            op_code: bruty_share::OperationCode::InvalidSession,
+                            data: bruty_share::Data::InvalidSession(
+                                bruty_share::ErrorCode::SessionTimeout.populate(),
+                            ),
+                        })
+                        .await
+                        .unwrap();
+
+                    manually_closed = true;
+
+                    websocket_sender.close().await.unwrap();
+
+                    break;
+                }
+
+                session.heartbeat_received = false;
+
+                heartbeat_timer = Box::pin(tokio::time::sleep_until(
+                    tokio::time::Instant::now() + tokio::time::Duration::from_secs(10),
+                ));
             }
         }
     }
@@ -290,6 +325,7 @@ fn handle_connection(
                 &mut bruty_share::types::Session {
                     authenticated: false,
                     awaiting_results: Vec::new(),
+                    heartbeat_received: false,
                     user: bruty_share::types::User {
                         id: 0,
                         name: "unknown".to_string(),

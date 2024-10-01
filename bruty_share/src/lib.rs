@@ -22,6 +22,7 @@ pub enum ErrorCode {
     NotExpectingResults,
     ExpectingResults,
     WrongResultString,
+    SessionTimeout,
 }
 
 impl ErrorCode {
@@ -81,6 +82,11 @@ impl ErrorCode {
                 description: "Wrong result string".to_string(),
                 explanation: "Your results don't start from the ID we are expecting.".to_string(),
             },
+            ErrorCode::SessionTimeout => InvalidSessionData {
+                code: ErrorCode::SessionTimeout,
+                description: "Session timeout".to_string(),
+                explanation: "You didn't send a heartbeat in time.".to_string(),
+            },
         }
     }
 }
@@ -88,6 +94,8 @@ impl ErrorCode {
 /// WebSocket OP codes. Comments show client action and description.
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub enum OperationCode {
+    /// Send | Heartbeat
+    Heartbeat,
     /// Send | Starts a new session
     Identify,
     /// Send | Requests a test
@@ -130,6 +138,7 @@ pub struct InvalidSessionData {
 /// WebSocket payload data
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub enum Data {
+    Heartbeat,
     Identify(IdentifyData),
     TestRequest,
     TestRequestData(TestRequestData),
