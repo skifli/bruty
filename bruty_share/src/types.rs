@@ -22,6 +22,7 @@ pub struct UserEvent {
 pub enum VideoEvent {
     Success,
     NotEmbeddable,
+    NotFound,
 }
 
 /// Represents video data.

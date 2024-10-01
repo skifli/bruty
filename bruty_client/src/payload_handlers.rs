@@ -1,60 +1,7 @@
-use futures::StreamExt;
 use futures_util::SinkExt;
 
+use crate::client_threads;
 use crate::WebSocketSender;
-
-pub struct IdGenerator {
-    current_id: Vec<char>,
-    tenth_index: usize,
-    eleventh_index: usize,
-}
-
-impl IdGenerator {
-    pub fn new(start_id: Vec<char>) -> Self {
-        Self {
-            current_id: start_id,
-            tenth_index: 0,
-            eleventh_index: 0,
-        }
-    }
-}
-
-impl Iterator for IdGenerator {
-    type Item = Vec<char>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.current_id.len() == 9 {
-            self.current_id.extend(vec!['a', 'a']);
-
-            return Some(self.current_id.clone());
-        } else if self.current_id.len() == 11 {
-            if self.eleventh_index + 1 < bruty_share::VALID_CHARS.len() {
-                self.eleventh_index += 1;
-                self.current_id.pop();
-                self.current_id
-                    .push(bruty_share::VALID_CHARS[self.eleventh_index]);
-
-                return Some(self.current_id.clone());
-            } else {
-                self.current_id.pop();
-            }
-        }
-
-        if self.tenth_index + 1 < bruty_share::VALID_CHARS.len() {
-            self.tenth_index += 1;
-
-            self.current_id.pop();
-            self.current_id
-                .extend(vec![bruty_share::VALID_CHARS[self.tenth_index], 'a']);
-
-            self.eleventh_index = 0;
-
-            return Some(self.current_id.clone());
-        } else {
-            None
-        }
-    }
-}
 
 /// Run when the server has requested us to test video IDs.
 ///
@@ -66,7 +13,8 @@ impl Iterator for IdGenerator {
 pub async fn test_request_data(
     websocket_sender: &mut WebSocketSender,
     payload_send_sender: &flume::Sender<bruty_share::Payload>,
-    reqwest_client: &reqwest::Client,
+    id_sender: &flume::Sender<Vec<char>>,
+    positives_receiver: &flume::Receiver<bruty_share::types::Video>,
     payload: bruty_share::Payload,
 ) {
     let test_request_data = match payload.data {
@@ -85,96 +33,32 @@ pub async fn test_request_data(
         test_request_data.id.iter().collect::<String>()
     );
 
+    let id_sender_clone = id_sender.clone();
     let payload_send_sender_clone = payload_send_sender.clone();
-    let reqwest_client_clone = reqwest_client.clone();
-
-    let url_base = "https://www.youtube.com/oembed?url=http://www.youtube.com/watch?v=";
+    let positives_receiver_clone = positives_receiver.clone();
 
     tokio::spawn(async move {
         let start_time = tokio::time::Instant::now();
 
-        let id_generator = IdGenerator::new(test_request_data.id.clone());
+        client_threads::generate_ids(&id_sender_clone, test_request_data.id.clone()).await;
 
-        let bodies = futures::stream::FuturesUnordered::from_iter(
-            id_generator.map(|id| {
-            let client = &reqwest_client_clone;
-    
-            async move {
-                let id_vec = id.clone();
-                let id_str = id.iter().collect::<String>();
+        let mut positives = Vec::new();
 
-                loop {
-                    let response = client
-                        .get(
-                            format!(
-                                "{}{}",
-                                url_base,
-                                id_str
-                            )
-                        )
-                        .send()
-                        .await;
-    
-                    if response.is_err() {
-                        log::warn!(
-                            "Error occurred while requesting {} check ({}). Retrying in 1 second...",
-                            id_str,
-                            response.as_ref().unwrap_err()
-                        );
-                        continue;
-                    }
-    
-                    let response = response.unwrap();
-    
-                    match response.status().as_u16() {
-                        200 => {
-                            let video_data: bruty_share::types::VideoData =
-                                sonic_rs::from_str(&response.text().await.unwrap()).unwrap();
-    
-                            return Some(bruty_share::types::Video {
-                                event: bruty_share::types::VideoEvent::Success,
-                                id: id_vec,
-                                video_data: Some(video_data),
-                            });
-                        }
-                        401 => {
-                            return Some(bruty_share::types::Video {
-                                event: bruty_share::types::VideoEvent::NotEmbeddable,
-                                id: id_vec,
-                                video_data: None,
-                            });
-                        }
-                        404 | 400 => {
-                            return None;
-                        }
-                        _ => {
-                            log::warn!(
-                                "Error occurred while checking ID: {} ({}). Retrying...",
-                                id_str,
-                                response.status().as_u16()
-                            );
-                        }
-                    }
-                }
+        for _ in 0..4096 {
+            let video = positives_receiver_clone.recv().unwrap();
+
+            if video.event != bruty_share::types::VideoEvent::NotFound {
+                // If it wasn't a not found
+                positives.push(video);
             }
-        }));
-
-        let positives = bodies
-            .filter_map(|video_option| async {
-            match video_option {
-                Some(video) => match video.event {
-                    bruty_share::types::VideoEvent::NotEmbeddable | bruty_share::types::VideoEvent::Success => Some(video),
-                },
-                None => None,
-            }
-            })
-            .collect::<Vec<bruty_share::types::Video>>()
-            .await;
+        }
 
         let elapsed_time = start_time.elapsed().as_secs_f64();
 
         log::info!(
-            "Sending results for {} in {}s ({}/s)",
+            "Sending {} positive{} for {} in {}s ({}/s)",
+            positives.len(),
+            if positives.len() == 1 { "" } else { "s" },
             test_request_data.id.iter().collect::<String>(),
             elapsed_time,
             4096.0 / elapsed_time
