@@ -8,7 +8,15 @@ pub async fn id_checker(
     let url_base = "https://www.youtube.com/oembed?url=http://www.youtube.com/watch?v=".to_string();
 
     loop {
-        let id = id_receiver.recv_async().await.unwrap(); // Await an ID to check
+        let id = id_receiver.recv_async().await;
+
+        if id.is_err() {
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+            continue;
+        }
+
+        let id = id.unwrap();
 
         let id_vec = id.clone();
         let id_str = id.iter().collect::<String>();

@@ -106,7 +106,7 @@ pub async fn results_progress_handler(
         }
 
         if awaiting_current_id_update.len() > 0 {
-            for (index, id) in awaiting_current_id_update.clone().iter().enumerate() {
+            for id in awaiting_current_id_update.clone() {
                 // Only want to update current ID when all awaiting IDs start with current ID.
                 // This means that we are not waiting for any results from the previous current ID.
 
@@ -150,12 +150,11 @@ pub async fn results_progress_handler(
                 } else {
                     if cant_update_awaiting_results != awaiting_current_id_update {
                         log::warn!(
-                            "Can't update current ID to {:?}[{}], awaiting {:?}",
+                            "Can't update current ID to {:?}, awaiting {:?}",
                             awaiting_current_id_update
                                 .iter()
                                 .map(|x| x.iter().collect::<String>())
                                 .collect::<Vec<String>>(),
-                            index,
                             awaiting_results
                                 .iter()
                                 .map(|x| x.iter().collect::<String>())
