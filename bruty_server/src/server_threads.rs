@@ -188,9 +188,6 @@ pub async fn results_handler(results_receiver: flume::Receiver<Vec<bruty_share::
                         result.id.iter().collect::<String>()
                     );
                 }
-                _ => {
-                    // Do nothing
-                }
             }
         }
     }
