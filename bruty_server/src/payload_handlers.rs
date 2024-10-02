@@ -41,15 +41,16 @@ async fn check_authenticated(
 ///
 /// # Arguments
 /// * `websocket_sender` - The WebSocket sender.
-/// * `payload` - The WebSocket message's payload.
+/// * `payload` - The WebSocket payload.
 /// * `session` - The session of the connection.
 /// * `persist` - The database connection.
-/// * `server_channels` - The server's channels.
+/// * `server_channels` - The server's channels, used for communication between threads.
 pub async fn identify(
     websocket_sender: &mut WebSocketSender,
     payload: bruty_share::Payload,
     session: &mut bruty_share::types::Session,
-    persist: shuttle_persist::PersistInstance,
+    persist: &shuttle_persist::PersistInstance,
+    server_channels: &bruty_share::types::ServerChannels,
 ) {
     let users = persist
         .load::<Vec<bruty_share::types::User>>("users")
@@ -133,42 +134,26 @@ pub async fn identify(
     );
 
     session.authenticated = true;
+
+    for _ in 0..identify_data.advanced_generations {
+        test_request(websocket_sender, session, &server_channels).await;
+    }
 }
 
-/// Run if the client requests an ID to test.
+/// Run if the an ID to test is triggered.
 ///
 /// # Arguments
 /// * `websocket_sender` - The WebSocket sender.
 /// * `session` - The session of the connection.
-/// * `server_channels` - The server's channels.
+/// * `server_channels` - The server's channels, used for communication between threads.
 pub async fn test_request(
     websocket_sender: &mut WebSocketSender,
     session: &mut bruty_share::types::Session,
-    server_channels: bruty_share::types::ServerChannels,
+    server_channels: &bruty_share::types::ServerChannels,
 ) {
-    if !check_authenticated(websocket_sender, session).await {
-        return;
-    }
-
-    if !session.awaiting_results.is_empty() {
-        // We are already expecting results
-
-        websocket_sender
-            .send_payload(bruty_share::Payload {
-                op_code: bruty_share::OperationCode::InvalidSession,
-                data: bruty_share::Data::InvalidSession(
-                    bruty_share::ErrorCode::ExpectingResults.populate(),
-                ),
-            })
-            .await
-            .unwrap();
-
-        return;
-    }
-
     let id = server_channels.id_receiver.recv().unwrap(); // Get the ID
 
-    session.awaiting_results = id.clone(); // Set the awaiting results
+    session.awaiting_results.push(id.clone()); // Add the ID to the awaiting results
 
     websocket_sender
         .send_payload(bruty_share::Payload {
@@ -184,14 +169,14 @@ pub async fn test_request(
 ///
 /// # Arguments
 /// * `websocket_sender` - The WebSocket sender.
-/// * `payload` - The WebSocket message's payload.
+/// * `payload` - The WebSocket payload.
 /// * `session` - The session of the connection.
-/// * `server_channels` - The server's channels.
+/// * `server_channels` - The server's channels, used for communication between threads.
 pub async fn testing_result(
     websocket_sender: &mut WebSocketSender,
     payload: bruty_share::Payload,
     session: &mut bruty_share::types::Session,
-    server_channels: bruty_share::types::ServerChannels,
+    server_channels: &bruty_share::types::ServerChannels,
 ) {
     if !check_authenticated(websocket_sender, session).await {
         return;
@@ -233,10 +218,10 @@ pub async fn testing_result(
         return;
     };
 
-    if testing_result_data.id != session.awaiting_results {
+    if !session.awaiting_results.contains(&testing_result_data.id) {
         // The result string is not what we are expecting
         log::warn!(
-            "Expected results for {:?}, got results for {:?} from {} (ID {}).",
+            "Expected results for any of {:?}, got results for {:?} from {} (ID {}).",
             session.awaiting_results,
             testing_result_data.id,
             session.user.name,
@@ -257,6 +242,10 @@ pub async fn testing_result(
         return;
     }
 
+    session
+        .awaiting_results
+        .retain(|id| id != &testing_result_data.id); // Remove the ID from the awaiting results
+
     server_channels
         .results_received_sender
         .send(testing_result_data.id)
@@ -266,6 +255,4 @@ pub async fn testing_result(
         .results_sender
         .send(testing_result_data.positives)
         .unwrap(); // Send the results to the results handler
-
-    session.awaiting_results = Vec::new(); // Clear the awaiting results
 }

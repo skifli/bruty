@@ -1,14 +1,14 @@
 /// Generates permutations of the ID.
 ///
 /// # Arguments
-/// * `id` - The ID to generate permutations for.
-/// * `current_id` - The current ID.
+/// * `id` - The (base) ID to generate permutations for.
+/// * `current_id` - The ID we are on right now.
 /// * `id_sender` - The sender to send the current ID to (so it can be passed to client(s)).
 /// * `results_awaiting_sender` - The sender to send the current ID to (so we can make sure we get all the results we asked for).
-/// * `current_id_sender` - The sender to send the current ID to when we get to a new ID of length 8.
+/// * `current_id_sender` - The sender to send the current ID to when we get to a new ID of length 8 (so it is saved).
 pub fn permutation_generator(
     starting_id: &mut Vec<char>,
-    current_id: Vec<char>,
+    current_id: &Vec<char>,
     id_sender: &flume::Sender<Vec<char>>,
     results_awaiting_sender: &flume::Sender<Vec<char>>,
     current_id_sender: &flume::Sender<Vec<char>>,
@@ -51,7 +51,7 @@ pub fn permutation_generator(
 
             permutation_generator(
                 &mut new_id,
-                current_id.clone(),
+                current_id,
                 id_sender,
                 results_awaiting_sender,
                 current_id_sender,
@@ -133,15 +133,7 @@ pub async fn results_progress_handler(
                 }) {
                     state.current_id = awaiting_current_id_update.remove(0);
 
-                    persist
-                        .save(
-                            "server_state",
-                            bruty_share::types::ServerState {
-                                current_id: state.current_id.clone(),
-                                starting_id: state.starting_id.clone(),
-                            },
-                        )
-                        .unwrap(); // Save the current ID to the database
+                    persist.save("server_state", state.clone()).unwrap(); // Save the current ID to the database
 
                     log::info!(
                         "Finished checking {}",
@@ -150,15 +142,19 @@ pub async fn results_progress_handler(
                 } else {
                     if cant_update_awaiting_results != awaiting_current_id_update {
                         log::warn!(
-                            "Can't update current ID to {:?}, awaiting {:?}",
-                            awaiting_current_id_update
-                                .iter()
-                                .map(|x| x.iter().collect::<String>())
-                                .collect::<Vec<String>>(),
-                            awaiting_results
-                                .iter()
-                                .map(|x| x.iter().collect::<String>())
-                                .collect::<Vec<String>>()
+                            "Can't update current ID to [\"{}\"{}], awaiting [\"{}\"{}]",
+                            awaiting_current_id_update[0].iter().collect::<String>(),
+                            if awaiting_current_id_update.len() > 1 {
+                                "...".to_string()
+                            } else {
+                                "".to_string()
+                            },
+                            awaiting_results[0].iter().collect::<String>(),
+                            if awaiting_results.len() > 1 {
+                                "...".to_string()
+                            } else {
+                                "".to_string()
+                            }
                         );
 
                         cant_update_awaiting_results = awaiting_current_id_update.clone();
@@ -174,7 +170,7 @@ pub async fn results_progress_handler(
 /// Handles the results.
 ///
 /// # Arguments
-/// * `results_receiver` - The receiver for the results.
+/// * `results_receiver` - The receiver for the results (of checking videos).
 pub async fn results_handler(results_receiver: flume::Receiver<Vec<bruty_share::types::Video>>) {
     loop {
         let results = results_receiver.recv().unwrap();
