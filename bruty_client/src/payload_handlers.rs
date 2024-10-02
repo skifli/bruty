@@ -25,7 +25,7 @@ pub async fn test_request_data(
     };
 
     log::info!(
-        "Testing {}",
+        "Generating IDs for {}",
         test_request_data.id.iter().collect::<String>()
     );
 

@@ -74,8 +74,8 @@ struct Args {
     #[arg(
         short = 'a',
         long = "advanced-generations",
-        help = "Number of IDs to be generated in advance",
-        default_value_t = 4
+        help = "Number of IDs to be generated in advance (multiply by 64^2)",
+        default_value_t = 8
     )]
     advanced_generations: u8,
 }

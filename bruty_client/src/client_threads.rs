@@ -4,11 +4,12 @@ use sonic_rs;
 struct IDCheckingStats {
     total_checked: u16,
     positives: Vec<bruty_share::types::Video>,
-    start_time: std::time::Instant,
 }
 
 pub async fn results_handler(client_channels: &bruty_share::types::ClientChannels) {
     let mut results_map: ahash::AHashMap<Vec<char>, IDCheckingStats> = ahash::AHashMap::new();
+    let mut completed_checks: u64 = 0;
+    let start_time = std::time::Instant::now();
 
     loop {
         let video = client_channels.results_receiver.recv_async().await;
@@ -26,7 +27,6 @@ pub async fn results_handler(client_channels: &bruty_share::types::ClientChannel
         let stats = results_map.entry(base_id).or_insert(IDCheckingStats {
             total_checked: 0,
             positives: Vec::new(),
-            start_time: std::time::Instant::now(),
         });
 
         stats.total_checked += 1;
@@ -36,16 +36,18 @@ pub async fn results_handler(client_channels: &bruty_share::types::ClientChannel
         }
 
         if stats.total_checked == 4096 {
+            completed_checks += 1;
+
             let base_id_clone_clone = base_id_clone.clone();
 
             let positives_len = stats.positives.len();
 
             log::info!(
-                "Tested {} @{}/s ({} positive{})",
+                "Tested {} with {} hit{}, client @{}/s",
                 base_id_clone.iter().collect::<String>(),
-                stats.start_time.elapsed().as_secs() / 4096,
                 positives_len,
-                if positives_len == 1 { "" } else { "s" }
+                if positives_len == 1 { "" } else { "s" },
+                completed_checks as f64 * 4069.0 / start_time.elapsed().as_secs_f64(),
             );
 
             client_channels
@@ -191,6 +193,8 @@ pub async fn generate_all_ids(client_channels: &bruty_share::types::ClientChanne
 
         let base_id = base_id.unwrap();
 
-        generate_ids(base_id, client_channels);
+        generate_ids(base_id.clone(), client_channels);
+
+        log::info!("Generated IDs for {}", base_id.iter().collect::<String>());
     }
 }
