@@ -272,12 +272,6 @@ async fn handle_websocket(
     }
 
     if !session.awaiting_results.is_empty() {
-        log::info!(
-            "Cleaning up session for {} (ID {}).",
-            session.user.name,
-            session.user.id,
-        );
-
         // We are awaiting results from this session, but it's gone. So, send the results to the next session.
         for id in session.awaiting_results.iter() {
             server_channels.id_sender.send(id.clone()).unwrap();
