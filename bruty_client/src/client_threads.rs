@@ -4,6 +4,7 @@ use sonic_rs;
 struct IDCheckingStats {
     total_checked: u16,
     positives: Vec<bruty_share::types::Video>,
+    start_time: std::time::Instant,
 }
 
 pub async fn results_handler(client_channels: &bruty_share::types::ClientChannels) {
@@ -18,14 +19,15 @@ pub async fn results_handler(client_channels: &bruty_share::types::ClientChannel
         }
 
         let video = video.unwrap();
-        let video_id = video.id.clone();
 
-        let stats = results_map
-            .entry(video.id.clone())
-            .or_insert(IDCheckingStats {
-                total_checked: 0,
-                positives: Vec::new(),
-            });
+        let base_id: Vec<char> = video.id.iter().take(9).cloned().collect();
+        let base_id_clone = base_id.clone();
+
+        let stats = results_map.entry(base_id).or_insert(IDCheckingStats {
+            total_checked: 0,
+            positives: Vec::new(),
+            start_time: std::time::Instant::now(),
+        });
 
         stats.total_checked += 1;
 
@@ -34,12 +36,14 @@ pub async fn results_handler(client_channels: &bruty_share::types::ClientChannel
         }
 
         if stats.total_checked == 4096 {
-            let video_id_clone = video_id.clone();
+            let base_id_clone_clone = base_id_clone.clone();
+
             let positives_len = stats.positives.len();
 
             log::info!(
-                "Tested {} ({} positive{})",
-                video_id.clone().iter().collect::<String>(),
+                "Tested {} @{}/s ({} positive{})",
+                base_id_clone.iter().collect::<String>(),
+                stats.start_time.elapsed().as_secs() / 4096,
                 positives_len,
                 if positives_len == 1 { "" } else { "s" }
             );
@@ -49,8 +53,8 @@ pub async fn results_handler(client_channels: &bruty_share::types::ClientChannel
                 .send(bruty_share::Payload {
                     op_code: bruty_share::OperationCode::TestingResult,
                     data: bruty_share::Data::TestingResult(bruty_share::TestingResultData {
-                        id: video_id,
-                        positives: results_map.remove(&video_id_clone).unwrap().positives,
+                        id: base_id_clone,
+                        positives: results_map.remove(&base_id_clone_clone).unwrap().positives,
                     }),
                 })
                 .unwrap();

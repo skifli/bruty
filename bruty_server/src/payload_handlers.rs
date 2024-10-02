@@ -246,6 +246,8 @@ pub async fn testing_result(
         .awaiting_results
         .retain(|id| id != &testing_result_data.id); // Remove the ID from the awaiting results
 
+    test_request(websocket_sender, session, server_channels).await; // Request a new test
+
     server_channels
         .results_received_sender
         .send(testing_result_data.id)
