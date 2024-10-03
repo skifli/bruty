@@ -140,7 +140,7 @@ pub async fn results_progress_handler(
                     log::info!(
                         "Finished checking {} @{}/s",
                         state.current_id.iter().collect::<String>(),
-                        262144 / start_times.remove(0).elapsed().as_secs()
+                        262144.0 / start_times.remove(0).elapsed().as_secs_f64()
                     );
                 } else {
                     if cant_update_awaiting_results != awaiting_current_id_update {
