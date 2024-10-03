@@ -78,7 +78,6 @@ pub async fn results_progress_handler(
     let mut awaiting_results = Vec::new();
     let mut awaiting_current_id_update = Vec::new();
 
-    let mut cant_update_awaiting_results = Vec::new();
     let mut start_times = Vec::new();
 
     loop {
@@ -89,7 +88,6 @@ pub async fn results_progress_handler(
 
             awaiting_current_id_update.push(id.clone());
             start_times.push(std::time::Instant::now());
-            cant_update_awaiting_results.clear();
         }
 
         let results_awaiting_receiver_try = results_awaiting_receiver.try_recv();
@@ -142,28 +140,6 @@ pub async fn results_progress_handler(
                         state.current_id.iter().collect::<String>(),
                         262144.0 / start_times.remove(0).elapsed().as_secs_f64()
                     );
-                } else {
-                    if cant_update_awaiting_results != awaiting_current_id_update {
-                        log::warn!(
-                            "Can't update current ID to [\"{}\"{}], awaiting [\"{}\"{}]",
-                            awaiting_current_id_update[0].iter().collect::<String>(),
-                            if awaiting_current_id_update.len() > 1 {
-                                "...".to_string()
-                            } else {
-                                "".to_string()
-                            },
-                            awaiting_results[0].iter().collect::<String>(),
-                            if awaiting_results.len() > 1 {
-                                "...".to_string()
-                            } else {
-                                "".to_string()
-                            }
-                        );
-
-                        cant_update_awaiting_results = awaiting_current_id_update.clone();
-                    }
-
-                    break;
                 }
             }
         }
