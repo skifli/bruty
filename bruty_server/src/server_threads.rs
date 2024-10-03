@@ -84,8 +84,6 @@ pub async fn results_progress_handler(
         let current_id_receiver_try = current_id_receiver.try_recv();
 
         if let Ok(id) = current_id_receiver_try {
-            log::info!("Finished generating {}", id.iter().collect::<String>());
-
             awaiting_current_id_update.push(id.clone());
             start_times.push(std::time::Instant::now());
         }
