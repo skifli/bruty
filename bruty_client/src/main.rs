@@ -75,7 +75,7 @@ struct Args {
         short = 'a',
         long = "advanced-generations",
         help = "Number of IDs to be generated in advance (multiply by 64^2)",
-        default_value_t = 64
+        default_value_t = 2
     )]
     advanced_generations: u16,
 }
