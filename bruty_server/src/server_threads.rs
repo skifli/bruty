@@ -78,14 +78,14 @@ pub async fn results_progress_handler(
     let mut awaiting_results = Vec::new();
     let mut awaiting_current_id_update = Vec::new();
 
-    let mut start_times = Vec::new();
+    let mut checked_ids = 0;
+    let mut start_time = std::time::Instant::now();
 
     loop {
         let current_id_receiver_try = current_id_receiver.try_recv();
 
         if let Ok(id) = current_id_receiver_try {
             awaiting_current_id_update.push(id.clone());
-            start_times.push(std::time::Instant::now());
         }
 
         let results_awaiting_receiver_try = results_awaiting_receiver.try_recv();
@@ -133,10 +133,12 @@ pub async fn results_progress_handler(
 
                     persist.save("server_state", state.clone()).unwrap(); // Save the current ID to the database
 
+                    checked_ids += 1;
+
                     log::info!(
                         "Finished checking {} @{}/s",
                         state.current_id.iter().collect::<String>(),
-                        262144.0 / start_times.remove(0).elapsed().as_secs_f64()
+                        (checked_ids as f64 * 262144.0) / start_time.elapsed().as_secs_f64()
                     );
                 }
             }
