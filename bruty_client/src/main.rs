@@ -75,9 +75,9 @@ struct Args {
         short = 'a',
         long = "advanced-generations",
         help = "Number of IDs to be generated in advance (multiply by 64^2)",
-        default_value_t = 8
+        default_value_t = 256
     )]
-    advanced_generations: u8,
+    advanced_generations: u16,
 }
 
 /// Handles a WebSocket message.

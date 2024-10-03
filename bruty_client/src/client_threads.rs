@@ -8,8 +8,6 @@ struct IDCheckingStats {
 
 pub async fn results_handler(client_channels: &bruty_share::types::ClientChannels) {
     let mut results_map: ahash::AHashMap<Vec<char>, IDCheckingStats> = ahash::AHashMap::new();
-    let mut completed_checks: u64 = 0;
-    let start_time = std::time::Instant::now();
 
     loop {
         let video = client_channels.results_receiver.recv_async().await;
@@ -36,18 +34,15 @@ pub async fn results_handler(client_channels: &bruty_share::types::ClientChannel
         }
 
         if stats.total_checked == 4096 {
-            completed_checks += 1;
-
             let base_id_clone_clone = base_id_clone.clone();
 
             let positives_len = stats.positives.len();
 
             log::info!(
-                "Tested {} with {} hit{}, client @{}/s",
+                "Tested {} with {} hit{}",
                 base_id_clone.iter().collect::<String>(),
                 positives_len,
                 if positives_len == 1 { "" } else { "s" },
-                completed_checks as f64 * 4069.0 / start_time.elapsed().as_secs_f64(),
             );
 
             client_channels

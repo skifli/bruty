@@ -45,8 +45,7 @@ impl ErrorCode {
             ErrorCode::DecodeError => InvalidSessionData {
                 code: ErrorCode::DecodeError,
                 description: "Decode error".to_string(),
-                explanation: "The server
-                received an invalid payload."
+                explanation: "The server received an invalid payload."
                     .to_string(),
             },
             ErrorCode::AuthenticationFailed => InvalidSessionData {
@@ -103,7 +102,7 @@ pub enum OperationCode {
 /// Data sent with an Identify OP code
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct IdentifyData {
-    pub advanced_generations: u8,
+    pub advanced_generations: u16,
     pub client_version: String,
     pub id: u8,
     pub secret: String,

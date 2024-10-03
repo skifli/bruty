@@ -14,7 +14,7 @@ pub fn permutation_generator(
     current_id_sender: &flume::Sender<Vec<char>>,
 ) {
     if starting_id.len() == 9 {
-        while id_sender.len() > 0 {
+        while id_sender.len() > 256 {
             // Wait for IDs
         }
 
@@ -79,6 +79,7 @@ pub async fn results_progress_handler(
     let mut awaiting_current_id_update = Vec::new();
 
     let mut cant_update_awaiting_results = Vec::new();
+    let mut start_times = Vec::new();
 
     loop {
         let current_id_receiver_try = current_id_receiver.try_recv();
@@ -87,6 +88,7 @@ pub async fn results_progress_handler(
             log::info!("Finished generating {}", id.iter().collect::<String>());
 
             awaiting_current_id_update.push(id.clone());
+            start_times.push(std::time::Instant::now());
             cant_update_awaiting_results.clear();
         }
 
@@ -136,8 +138,9 @@ pub async fn results_progress_handler(
                     persist.save("server_state", state.clone()).unwrap(); // Save the current ID to the database
 
                     log::info!(
-                        "Finished checking {}",
-                        state.current_id.iter().collect::<String>()
+                        "Finished checking {} @{}/s",
+                        state.current_id.iter().collect::<String>(),
+                        262144 / start_times.remove(0).elapsed().as_secs()
                     );
                 } else {
                     if cant_update_awaiting_results != awaiting_current_id_update {

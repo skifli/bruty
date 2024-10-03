@@ -283,7 +283,13 @@ async fn handle_websocket(
         }
 
         log::info!(
-            "Forwaded awaiting result from {} (ID {}) to the next session.",
+            "Forwaded {} awaiting result{} from {} (ID {}) to the next session.",
+            session.awaiting_results.len(),
+            if session.awaiting_results.len() == 1 {
+                ""
+            } else {
+                "s"
+            },
             session.user.name,
             session.user.id
         );
@@ -376,7 +382,7 @@ async fn main(
     let (results_sender, results_receiver) = flume::unbounded(); // Create a channel for when the server receives results, to send to the result handler.
     let (results_awaiting_sender, results_awaiting_receiver) = flume::unbounded(); // Create a channel for when the server is awaiting results.
     let (results_received_sender, results_received_receiver) = flume::unbounded(); // Create a channel for when the server receives results.
-    let (current_id_sender, current_id_receiver) = flume::bounded(1); // Create a channel for when the current project ID changes.
+    let (current_id_sender, current_id_receiver) = flume::unbounded(); // Create a channel for when the current project ID changes.
 
     let id_sender_clone = id_sender.clone();
     let results_awaiting_sender_clone = results_awaiting_sender.clone();
