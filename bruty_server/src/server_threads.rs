@@ -14,7 +14,7 @@ pub fn permutation_generator(
     current_id_sender: &flume::Sender<Vec<char>>,
 ) {
     if starting_id.len() == 9 {
-        while id_sender.len() > 256 {
+        while id_sender.len() > 64 {
             // Wait for IDs
         }
 
@@ -79,7 +79,7 @@ pub async fn results_progress_handler(
     let mut awaiting_current_id_update = Vec::new();
 
     let mut checked_ids = 0;
-    let mut start_time = std::time::Instant::now();
+    let start_time = std::time::Instant::now();
 
     loop {
         let current_id_receiver_try = current_id_receiver.try_recv();
