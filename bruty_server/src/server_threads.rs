@@ -14,7 +14,7 @@ pub fn permutation_generator(
     current_id_sender: &flume::Sender<Vec<char>>,
 ) {
     if starting_id.len() == 9 {
-        while id_sender.len() > 64 {
+        while id_sender.len() > 2 {
             // Wait for IDs
         }
 
