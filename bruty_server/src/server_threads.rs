@@ -78,29 +78,25 @@ pub async fn results_progress_handler(
     let mut awaiting_results = Vec::new();
     let mut awaiting_current_id_update = Vec::new();
 
-    let mut checked_ids = 0;
-    let start_time = std::time::Instant::now();
-
     loop {
-        let current_id_receiver_try = current_id_receiver.try_recv();
-
-        if let Ok(id) = current_id_receiver_try {
-            awaiting_current_id_update.push(id.clone());
-        }
-
-        let results_awaiting_receiver_try = results_awaiting_receiver.try_recv();
-
-        if let Ok(id) = results_awaiting_receiver_try {
-            if !awaiting_results.contains(&id) {
-                awaiting_results.push(id); // Add the ID to the list of awaiting results, if it's not already there
-                                           // It may be already there if a client disconnected before sending the results
-            }
-        }
-
-        let results_received_receiver_try = results_received_receiver.try_recv();
-
-        if let Ok(id) = results_received_receiver_try {
-            awaiting_results.retain(|x| x != &id); // Remove the ID from the list of awaiting results
+        tokio::select! {
+            current_id_result = current_id_receiver.recv_async() => {
+                if let Ok(id) = current_id_result {
+                    awaiting_current_id_update.push(id.clone());
+                }
+            },
+            results_awaiting_result = results_awaiting_receiver.recv_async() => {
+                if let Ok(id) = results_awaiting_result {
+                    if !awaiting_results.contains(&id) {
+                        awaiting_results.push(id); // Add the ID to the list of awaiting results, if it's not already there
+                    }
+                }
+            },
+            results_received_result = results_received_receiver.recv_async() => {
+                if let Ok(id) = results_received_result {
+                    awaiting_results.retain(|x| x != &id); // Remove the ID from the list of awaiting results
+                }
+            },
         }
 
         if awaiting_current_id_update.len() > 0 {
@@ -133,13 +129,12 @@ pub async fn results_progress_handler(
 
                     persist.save("server_state", state.clone()).unwrap(); // Save the current ID to the database
 
-                    checked_ids += 1;
-
                     log::info!(
-                        "Finished checking {} @{}/s",
-                        state.current_id.iter().collect::<String>(),
-                        (checked_ids as f64 * 262144.0) / start_time.elapsed().as_secs_f64()
+                        "Finished checking {}",
+                        state.current_id.iter().collect::<String>()
                     );
+                } else {
+                    break; // We can't update this one, so we most definitely can't update later ones
                 }
             }
         }
