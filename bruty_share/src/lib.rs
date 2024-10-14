@@ -20,7 +20,6 @@ pub enum ErrorCode {
     UnsupportedClientVersion,
     NotAuthenticated,
     NotExpectingResults,
-    ExpectingResults,
     WrongResultString,
     SessionTimeout,
 }
@@ -46,8 +45,7 @@ impl ErrorCode {
             ErrorCode::DecodeError => InvalidSessionData {
                 code: ErrorCode::DecodeError,
                 description: "Decode error".to_string(),
-                explanation: "The server
-                received an invalid payload."
+                explanation: "The server received an invalid payload."
                     .to_string(),
             },
             ErrorCode::AuthenticationFailed => InvalidSessionData {
@@ -72,11 +70,6 @@ impl ErrorCode {
                 description: "Not expecting results".to_string(),
                 explanation: "You didn't request a test.".to_string(),
             },
-            ErrorCode::ExpectingResults => InvalidSessionData {
-                code: ErrorCode::ExpectingResults,
-                description: "Expecting results".to_string(),
-                explanation: "You need to send the results of the previous test before requesting a new one.".to_string(),
-            },
             ErrorCode::WrongResultString => InvalidSessionData {
                 code: ErrorCode::WrongResultString,
                 description: "Wrong result string".to_string(),
@@ -98,8 +91,6 @@ pub enum OperationCode {
     Heartbeat,
     /// Send | Starts a new session
     Identify,
-    /// Send | Requests a test
-    TestRequest,
     /// Receive | Requests a test
     TestRequestData,
     /// Send | Sends the test results
@@ -111,8 +102,9 @@ pub enum OperationCode {
 /// Data sent with an Identify OP code
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct IdentifyData {
+    pub advanced_generations: u16,
     pub client_version: String,
-    pub id: i16,
+    pub id: u8,
     pub secret: String,
 }
 
@@ -140,7 +132,6 @@ pub struct InvalidSessionData {
 pub enum Data {
     Heartbeat,
     Identify(IdentifyData),
-    TestRequest,
     TestRequestData(TestRequestData),
     TestingResult(TestingResultData),
     InvalidSession(InvalidSessionData),

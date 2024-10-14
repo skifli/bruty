@@ -1,19 +1,81 @@
+use ahash;
 use sonic_rs;
 
+struct IDCheckingStats {
+    total_checked: u16,
+    positives: Vec<bruty_share::types::Video>,
+}
+
+pub async fn results_handler(client_channels: &bruty_share::types::ClientChannels) {
+    let mut results_map: ahash::AHashMap<Vec<char>, IDCheckingStats> = ahash::AHashMap::new();
+
+    loop {
+        let video = client_channels.results_receiver.recv_async().await;
+
+        if video.is_err() {
+            // Client has probably disconnected.
+            return;
+        }
+
+        let video = video.unwrap();
+
+        let base_id: Vec<char> = video.id.iter().take(9).cloned().collect();
+        let base_id_clone = base_id.clone();
+
+        let stats = results_map.entry(base_id).or_insert(IDCheckingStats {
+            total_checked: 0,
+            positives: Vec::new(),
+        });
+
+        stats.total_checked += 1;
+
+        if video.event != bruty_share::types::VideoEvent::NotFound {
+            stats.positives.push(video);
+        }
+
+        if stats.total_checked == 4096 {
+            let base_id_clone_clone = base_id_clone.clone();
+
+            let positives_len = stats.positives.len();
+
+            log::info!(
+                "Tested {} with {} hit{}",
+                base_id_clone.iter().collect::<String>(),
+                positives_len,
+                if positives_len == 1 { "" } else { "s" },
+            );
+
+            client_channels
+                .payload_send_sender
+                .send(bruty_share::Payload {
+                    op_code: bruty_share::OperationCode::TestingResult,
+                    data: bruty_share::Data::TestingResult(bruty_share::TestingResultData {
+                        id: base_id_clone,
+                        positives: results_map.remove(&base_id_clone_clone).unwrap().positives,
+                    }),
+                })
+                .unwrap();
+        }
+    }
+}
+
+/// Checks the IDs for validity.
+///
+/// # Arguments
+/// * `reqwest_client` - The reqwest client, used for checking the IDs.
+/// * `client_channels` - The client's channels, used for communication between threads.
 pub async fn id_checker(
-    id_receiver: &flume::Receiver<Vec<char>>,
     reqwest_client: &reqwest::Client,
-    positives_sender: &flume::Sender<bruty_share::types::Video>,
+    client_channels: &bruty_share::types::ClientChannels,
 ) {
     let url_base = "https://www.youtube.com/oembed?url=http://www.youtube.com/watch?v=".to_string();
 
     loop {
-        let id = id_receiver.recv_async().await;
+        let id = client_channels.id_receiver.recv_async().await;
 
         if id.is_err() {
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-
-            continue;
+            // Client has probably disconnected.
+            return;
         }
 
         let id = id.unwrap();
@@ -40,7 +102,8 @@ pub async fn id_checker(
                     let video_data: bruty_share::types::VideoData =
                         sonic_rs::from_str(&response.text().await.unwrap()).unwrap();
 
-                    positives_sender
+                    client_channels
+                        .results_sender
                         .send(bruty_share::types::Video {
                             event: bruty_share::types::VideoEvent::Success,
                             id: id_vec,
@@ -51,7 +114,8 @@ pub async fn id_checker(
                     break;
                 }
                 401 => {
-                    positives_sender
+                    client_channels
+                        .results_sender
                         .send(bruty_share::types::Video {
                             event: bruty_share::types::VideoEvent::NotEmbeddable,
                             id: id_vec,
@@ -62,7 +126,8 @@ pub async fn id_checker(
                     break;
                 }
                 404 | 400 => {
-                    positives_sender
+                    client_channels
+                        .results_sender
                         .send(bruty_share::types::Video {
                             event: bruty_share::types::VideoEvent::NotFound,
                             id: id_vec,
@@ -84,26 +149,47 @@ pub async fn id_checker(
     }
 }
 
-/// Checks the video IDs.
+/// Generates the IDs to be checked based on the base ID.
 ///
 /// # Arguments
-/// * `id_sender` - The sender for sending video IDs.
-/// * `id` - The ID to check.
-pub async fn generate_ids(id_sender: &flume::Sender<Vec<char>>, mut id: Vec<char>) {
-    if id.len() == 10 {
+/// * `base_id` - The base ID, which will be used to generate the IDs to be checked.
+/// * `client_channels` - The client's channels, used for communication between threads.
+pub fn generate_ids(mut base_id: Vec<char>, client_channels: &bruty_share::types::ClientChannels) {
+    if base_id.len() == 10 {
         for &chr in bruty_share::VALID_CHARS {
-            id.push(chr); // No need to clone here because it was cloned for us by the recursive call
+            base_id.push(chr); // No need to clone here because it was cloned for us by the recursive call
 
-            id_sender.send(id.clone()).unwrap();
+            client_channels.id_sender.send(base_id.clone()).unwrap();
 
-            id.pop();
+            base_id.pop();
         }
     } else {
         for &chr in bruty_share::VALID_CHARS {
-            let mut new_id = id.clone();
+            let mut new_id: Vec<char> = base_id.clone();
             new_id.push(chr);
 
-            Box::pin(generate_ids(id_sender, new_id)).await;
+            generate_ids(new_id, client_channels);
         }
+    }
+}
+
+/// Gets the base IDs to be checked, and generates the IDs to be checked based on them.
+///
+/// # Arguments
+/// * `client_channels` - The client's channels, used for communication between threads.
+pub async fn generate_all_ids(client_channels: &bruty_share::types::ClientChannels) {
+    loop {
+        let base_id = client_channels.base_id_receiver.recv_async().await;
+
+        if base_id.is_err() {
+            // Client has probably disconnected.
+            return;
+        }
+
+        let base_id = base_id.unwrap();
+
+        generate_ids(base_id.clone(), client_channels);
+
+        log::info!("Generated IDs for {}", base_id.iter().collect::<String>());
     }
 }

@@ -1,3 +1,5 @@
+use crate::Payload;
+
 /// Represents the server's state.
 #[derive(Clone, std::fmt::Debug, serde::Deserialize, serde::Serialize)]
 pub struct ServerState {
@@ -51,11 +53,23 @@ pub struct ServerChannels {
     pub results_awaiting_sender: flume::Sender<Vec<char>>,
 }
 
+#[derive(Clone)]
+pub struct ClientChannels {
+    pub base_id_receiver: flume::Receiver<Vec<char>>,
+    pub base_id_sender: flume::Sender<Vec<char>>,
+    pub id_receiver: flume::Receiver<Vec<char>>,
+    pub id_sender: flume::Sender<Vec<char>>,
+    pub payload_send_receiver: flume::Receiver<Payload>,
+    pub payload_send_sender: flume::Sender<Payload>,
+    pub results_receiver: flume::Receiver<Video>,
+    pub results_sender: flume::Sender<Video>,
+}
+
 /// Represents a connected client's session.
 #[derive(Clone)]
 pub struct Session {
     pub authenticated: bool,
-    pub awaiting_results: Vec<char>,
+    pub awaiting_results: Vec<Vec<char>>,
     pub heartbeat_received: bool,
     pub user: User,
 }
@@ -63,7 +77,7 @@ pub struct Session {
 /// Represents a user.
 #[derive(serde::Deserialize, serde::Serialize, Clone, Debug)]
 pub struct User {
-    pub id: i16,
+    pub id: u8,
     pub name: String,
     pub secret: String,
 }

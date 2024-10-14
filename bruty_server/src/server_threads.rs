@@ -1,20 +1,20 @@
 /// Generates permutations of the ID.
 ///
 /// # Arguments
-/// * `id` - The ID to generate permutations for.
-/// * `current_id` - The current ID.
+/// * `id` - The (base) ID to generate permutations for.
+/// * `current_id` - The ID we are on right now.
 /// * `id_sender` - The sender to send the current ID to (so it can be passed to client(s)).
 /// * `results_awaiting_sender` - The sender to send the current ID to (so we can make sure we get all the results we asked for).
-/// * `current_id_sender` - The sender to send the current ID to when we get to a new ID of length 8.
+/// * `current_id_sender` - The sender to send the current ID to when we get to a new ID of length 8 (so it is saved).
 pub fn permutation_generator(
     starting_id: &mut Vec<char>,
-    current_id: Vec<char>,
+    current_id: &Vec<char>,
     id_sender: &flume::Sender<Vec<char>>,
     results_awaiting_sender: &flume::Sender<Vec<char>>,
     current_id_sender: &flume::Sender<Vec<char>>,
 ) {
     if starting_id.len() == 9 {
-        while id_sender.len() > 0 {
+        while id_sender.len() > 2 {
             // Wait for IDs
         }
 
@@ -51,7 +51,7 @@ pub fn permutation_generator(
 
             permutation_generator(
                 &mut new_id,
-                current_id.clone(),
+                current_id,
                 id_sender,
                 results_awaiting_sender,
                 current_id_sender,
@@ -78,31 +78,25 @@ pub async fn results_progress_handler(
     let mut awaiting_results = Vec::new();
     let mut awaiting_current_id_update = Vec::new();
 
-    let mut cant_update_awaiting_results = Vec::new();
-
     loop {
-        let current_id_receiver_try = current_id_receiver.try_recv();
-
-        if let Ok(id) = current_id_receiver_try {
-            log::info!("Finished generating {}", id.iter().collect::<String>());
-
-            awaiting_current_id_update.push(id.clone());
-            cant_update_awaiting_results.clear();
-        }
-
-        let results_awaiting_receiver_try = results_awaiting_receiver.try_recv();
-
-        if let Ok(id) = results_awaiting_receiver_try {
-            if !awaiting_results.contains(&id) {
-                awaiting_results.push(id); // Add the ID to the list of awaiting results, if it's not already there
-                                           // It may be already there if a client disconnected before sending the results
-            }
-        }
-
-        let results_received_receiver_try = results_received_receiver.try_recv();
-
-        if let Ok(id) = results_received_receiver_try {
-            awaiting_results.retain(|x| x != &id); // Remove the ID from the list of awaiting results
+        tokio::select! {
+            current_id_result = current_id_receiver.recv_async() => {
+                if let Ok(id) = current_id_result {
+                    awaiting_current_id_update.push(id.clone());
+                }
+            },
+            results_awaiting_result = results_awaiting_receiver.recv_async() => {
+                if let Ok(id) = results_awaiting_result {
+                    if !awaiting_results.contains(&id) {
+                        awaiting_results.push(id); // Add the ID to the list of awaiting results, if it's not already there
+                    }
+                }
+            },
+            results_received_result = results_received_receiver.recv_async() => {
+                if let Ok(id) = results_received_result {
+                    awaiting_results.retain(|x| x != &id); // Remove the ID from the list of awaiting results
+                }
+            },
         }
 
         if awaiting_current_id_update.len() > 0 {
@@ -133,38 +127,14 @@ pub async fn results_progress_handler(
                 }) {
                     state.current_id = awaiting_current_id_update.remove(0);
 
-                    persist
-                        .save(
-                            "server_state",
-                            bruty_share::types::ServerState {
-                                current_id: state.current_id.clone(),
-                                starting_id: state.starting_id.clone(),
-                            },
-                        )
-                        .unwrap(); // Save the current ID to the database
+                    persist.save("server_state", state.clone()).unwrap(); // Save the current ID to the database
 
                     log::info!(
                         "Finished checking {}",
                         state.current_id.iter().collect::<String>()
                     );
                 } else {
-                    if cant_update_awaiting_results != awaiting_current_id_update {
-                        log::warn!(
-                            "Can't update current ID to {:?}, awaiting {:?}",
-                            awaiting_current_id_update
-                                .iter()
-                                .map(|x| x.iter().collect::<String>())
-                                .collect::<Vec<String>>(),
-                            awaiting_results
-                                .iter()
-                                .map(|x| x.iter().collect::<String>())
-                                .collect::<Vec<String>>()
-                        );
-
-                        cant_update_awaiting_results = awaiting_current_id_update.clone();
-                    }
-
-                    break;
+                    break; // We can't update this one, so we most definitely can't update later ones
                 }
             }
         }
@@ -174,7 +144,7 @@ pub async fn results_progress_handler(
 /// Handles the results.
 ///
 /// # Arguments
-/// * `results_receiver` - The receiver for the results.
+/// * `results_receiver` - The receiver for the results (of checking videos).
 pub async fn results_handler(results_receiver: flume::Receiver<Vec<bruty_share::types::Video>>) {
     loop {
         let results = results_receiver.recv().unwrap();
