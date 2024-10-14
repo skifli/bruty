@@ -56,7 +56,7 @@ impl SplitSinkExt for WebSocketSender {
 /// * `msg` - The WebSocket message.
 /// * `session` - The session of the connection.
 /// * `persist` - The database connection.
-/// * `server_channels` - The server's channels, used for communication between threads.
+/// * `server_channels` - The server's channels.
 ///
 /// # Returns
 /// * `bool` - Whether the connection shouldn't be closed.
@@ -64,8 +64,8 @@ async fn handle_msg(
     websocket_sender: &mut WebSocketSender,
     msg: warp::ws::Message,
     session: &mut bruty_share::types::Session,
-    persist: &shuttle_persist::PersistInstance,
-    server_channels: &bruty_share::types::ServerChannels,
+    persist: shuttle_persist::PersistInstance,
+    server_channels: bruty_share::types::ServerChannels,
 ) -> bool {
     let payload: bruty_share::Payload = match rmp_serde::from_slice(&msg.as_bytes()) {
         Ok(payload) => payload,
@@ -100,14 +100,11 @@ async fn handle_msg(
         }
         bruty_share::OperationCode::Identify => {
             // Identifies the client
-            payload_handlers::identify(
-                websocket_sender,
-                payload,
-                session,
-                persist,
-                server_channels,
-            )
-            .await;
+            payload_handlers::identify(websocket_sender, payload, session, persist).await;
+        }
+        bruty_share::OperationCode::TestRequest => {
+            // Requests a test
+            payload_handlers::test_request(websocket_sender, session, server_channels).await;
         }
         bruty_share::OperationCode::TestingResult => {
             // Process the test results
@@ -155,7 +152,7 @@ async fn handle_msg(
 /// * `websocket` - The WebSocket connection.
 /// * `session` - The session of the connection.
 /// * `persist` - The database connection.
-/// * `server_channels` - The server's channels, used for communication between threads.
+/// * `server_channels` - The server's channels.
 async fn handle_websocket(
     websocket: warp::ws::WebSocket,
     session: &mut bruty_share::types::Session,
@@ -199,8 +196,8 @@ async fn handle_websocket(
                         &mut websocket_sender,
                         msg,
                         session,
-                        &persist,
-                        &server_channels,
+                        persist.clone(),
+                        server_channels.clone(),
                     )
                     .await
                     {
@@ -272,24 +269,25 @@ async fn handle_websocket(
     }
 
     if !session.awaiting_results.is_empty() {
-        // We are awaiting results from this session, but it's gone. So, send the results to the next session.
-        for id in session.awaiting_results.iter() {
-            server_channels.id_sender.send(id.clone()).unwrap();
+        log::info!(
+            "Cleaning up session for {} (ID {}).",
+            session.user.name,
+            session.user.id,
+        );
 
-            server_channels
-                .results_awaiting_sender
-                .send(id.clone())
-                .unwrap();
-        }
+        // We are awaiting results from this session, but it's gone. So, send the results to the next session.
+        server_channels
+            .id_sender
+            .send(session.awaiting_results.clone())
+            .unwrap();
+
+        server_channels
+            .results_awaiting_sender
+            .send(session.awaiting_results.clone())
+            .unwrap();
 
         log::info!(
-            "Forwaded {} awaiting result{} from {} (ID {}) to the next session.",
-            session.awaiting_results.len(),
-            if session.awaiting_results.len() == 1 {
-                ""
-            } else {
-                "s"
-            },
+            "Forwaded awaiting result from {} (ID {}) to the next session.",
             session.user.name,
             session.user.id
         );
@@ -301,7 +299,7 @@ async fn handle_websocket(
 /// # Arguments
 /// * `ws` - The WebSocket upgrade.
 /// * `persist` - The database connection.
-/// * `server_channels` - The server's channels, used for communication between threads.
+/// * `server_channels` - The server's channels.
 /// * `headers` - The headers of the request.
 ///
 /// # Returns
@@ -359,7 +357,7 @@ async fn main(
         let user_secret = secrets.get(&format!("USER_{}_SECRET", user_id)).unwrap();
 
         users.push(bruty_share::types::User {
-            id: index as u8,
+            id: index as i16,
             name: user_name,
             secret: user_secret,
         });
@@ -402,7 +400,7 @@ async fn main(
     tokio::spawn(async move {
         server_threads::permutation_generator(
             &mut starting_id_clone,
-            &current_id_clone,
+            current_id_clone,
             &id_sender,
             &results_awaiting_sender,
             &current_id_sender,

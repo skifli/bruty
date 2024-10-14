@@ -58,7 +58,7 @@ impl SplitSinkExt for WebSocketSender {
 )]
 struct Args {
     /// The id used for authentication.
-    id: u8,
+    id: i16,
 
     /// The secret used for authentication.
     secret: String,
@@ -67,31 +67,28 @@ struct Args {
         short = 't',
         long = "threads",
         help = "Number of threads to use",
-        default_value_t = 512
+        default_value_t = 500
     )]
     threads: u16,
-
-    #[arg(
-        short = 'a',
-        long = "advanced-generations",
-        help = "Number of IDs to be generated in advance (multiply by 64^2)",
-        default_value_t = 2
-    )]
-    advanced_generations: u16,
 }
 
 /// Handles a WebSocket message.
 ///
 /// # Arguments
 /// * `websocket_sender` - The WebSocket sender.
-/// * `client_channels` - The client's channels, used for communication between threads.
+/// * `payload_send_sender` - The sender for sending payloads.
+/// * `id_sender` - The sender for sending IDs.
+/// * `positives_receiver` - The receiver for receiving positive video IDs.
+/// * `reqwest_client` - The reqwest client.
 /// * `msg` - The WebSocket message.
 ///
 /// # Returns
 /// * `bool` - Whether the connection shouldn't be closed.
 async fn handle_msg(
     websocket_sender: &mut WebSocketSender,
-    client_channels: &bruty_share::types::ClientChannels,
+    payload_send_sender: &flume::Sender<bruty_share::Payload>,
+    id_sender: &flume::Sender<Vec<char>>,
+    positives_receiver: &flume::Receiver<bruty_share::types::Video>,
     msg: Message,
 ) -> bool {
     let payload: bruty_share::Payload = match rmp_serde::from_read(msg.into_data().as_slice()) {
@@ -131,9 +128,18 @@ async fn handle_msg(
             return false;
         }
         bruty_share::OperationCode::TestRequestData => {
-            payload_handlers::test_request_data(websocket_sender, payload, client_channels).await;
+            payload_handlers::test_request_data(
+                websocket_sender,
+                payload_send_sender,
+                id_sender,
+                positives_receiver,
+                payload,
+            )
+            .await;
         }
-        bruty_share::OperationCode::Identify | bruty_share::OperationCode::TestingResult => {
+        bruty_share::OperationCode::Identify
+        | bruty_share::OperationCode::TestRequest
+        | bruty_share::OperationCode::TestingResult => {
             // We should never receive these from the client
             // Likely a bug, so we are going to close the connection
             log::warn!("Received unexpected OP code, closing connection");
@@ -168,62 +174,34 @@ async fn handle_msg(
 /// # Arguments
 /// * `websocket_stream` - The WebSocket stream.
 /// * `user` - The user.
-/// * `args` - The arguments.
 async fn handle_connection(
     websocket_stream: tokio_tungstenite::WebSocketStream<
         tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
     >,
     user: bruty_share::types::User,
-    args: &Args,
+    threads: u16,
 ) {
     let (mut websocket_sender, mut websocket_receiver) = websocket_stream.split();
+    let (payload_send_sender, payload_send_receiver) = flume::unbounded();
+    let (id_sender, id_receiver) = flume::unbounded();
+    let (positives_sender, positives_receiver) = flume::unbounded();
 
     let reqwest_client = reqwest::Client::new();
 
-    let (base_id_sender, base_id_receiver) = flume::unbounded();
-    let (id_sender, id_receiver) = flume::unbounded();
-    let (payload_send_sender, payload_send_receiver) = flume::unbounded();
-    let (results_sender, results_receiver) = flume::unbounded();
-
-    let client_channels = bruty_share::types::ClientChannels {
-        base_id_receiver,
-        base_id_sender,
-        id_receiver,
-        id_sender,
-        payload_send_receiver,
-        payload_send_sender,
-        results_receiver,
-        results_sender,
-    };
-
-    for _ in 0..args.advanced_generations {
-        let client_channels = client_channels.clone();
-
-        tokio::spawn(async move {
-            client_threads::generate_all_ids(&client_channels).await;
-        });
-    }
-
-    for _ in 0..args.threads {
-        let client_channels = client_channels.clone();
+    for _ in 0..threads {
+        let id_receiver = id_receiver.clone();
         let reqwest_client = reqwest_client.clone();
+        let positives_sender = positives_sender.clone();
 
         tokio::spawn(async move {
-            client_threads::id_checker(&reqwest_client, &client_channels).await;
+            client_threads::id_checker(&id_receiver, &reqwest_client, &positives_sender).await;
         });
     }
-
-    let client_channels_clone = client_channels.clone();
-
-    tokio::spawn(async move {
-        client_threads::results_handler(&client_channels_clone).await;
-    });
 
     websocket_sender
         .send_payload(bruty_share::Payload {
             op_code: bruty_share::OperationCode::Identify,
             data: bruty_share::Data::Identify(bruty_share::IdentifyData {
-                advanced_generations: args.advanced_generations,
                 client_version: VERSION.to_string(),
                 id: user.id,
                 secret: user.secret,
@@ -232,7 +210,29 @@ async fn handle_connection(
         .await
         .unwrap(); // Identify to the server
 
-    let mut heartbeat_tick = tokio::time::interval(tokio::time::Duration::from_secs(5));
+    let payload_send_sender_clone = payload_send_sender.clone();
+
+    tokio::spawn(async move {
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+        payload_send_sender_clone
+            .send(bruty_share::Payload {
+                op_code: bruty_share::OperationCode::TestRequest,
+                data: bruty_share::Data::TestRequest,
+            })
+            .unwrap();
+
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+
+            payload_send_sender_clone
+                .send(bruty_share::Payload {
+                    op_code: bruty_share::OperationCode::Heartbeat,
+                    data: bruty_share::Data::Heartbeat,
+                })
+                .unwrap();
+        }
+    }); // In another thread so we terminate before if we are on an old client version.
 
     loop {
         tokio::select! {
@@ -253,7 +253,7 @@ async fn handle_connection(
 
                 if msg.is_binary() {
                     // Binary WebSocket message received
-                    if !handle_msg(&mut websocket_sender, &client_channels, msg).await {
+                    if !handle_msg(&mut websocket_sender, &payload_send_sender, &id_sender, &positives_receiver, msg).await {
                         return;
                     }
                 } else if msg.is_close() {
@@ -267,16 +267,10 @@ async fn handle_connection(
                     continue;
                 }
             }
-            msg = client_channels.payload_send_receiver.recv_async() => {
+            msg = payload_send_receiver.recv_async() => {
                 if let Ok(payload) = msg {
                     websocket_sender.send_payload(payload).await.unwrap();
                 }
-            }
-            _ = heartbeat_tick.tick() => {
-                websocket_sender.send_payload(bruty_share::Payload {
-                    op_code: bruty_share::OperationCode::Heartbeat,
-                    data: bruty_share::Data::Heartbeat,
-                }).await.unwrap();
             }
         }
     }
@@ -286,8 +280,10 @@ async fn handle_connection(
 ///
 /// # Arguments
 /// * `remote_url` - The URL of the server.
-/// * `args` - The arguments.
-async fn create_connection(remote_url: &str, args: &Args) {
+/// * `id` - The id used for authentication.
+/// * `secret` - The secret used for authentication.
+/// * `threads` - The number of threads to use.
+async fn create_connection(remote_url: &str, id: i16, secret: String, threads: u16) {
     let mut request = remote_url.into_client_request().unwrap();
     request
         .headers_mut()
@@ -306,11 +302,11 @@ async fn create_connection(remote_url: &str, args: &Args) {
     handle_connection(
         websocket_stream,
         bruty_share::types::User {
-            id: args.id,
-            name: "".to_string(),
-            secret: args.secret.clone(),
+            id,
+            name: "unknown".to_string(),
+            secret,
         },
-        args,
+        threads,
     )
     .await;
 }
@@ -357,7 +353,7 @@ async fn main() {
 
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         } else {
-            create_connection(remote_url, &args).await;
+            create_connection(remote_url, args.id, args.secret.clone(), args.threads).await;
 
             log::warn!("Connection to server was lost, trying to connect again in 5 seconds.");
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
