@@ -1,7 +1,7 @@
 use crate::{SplitSinkExt, WebSocketSender};
 use futures_util::SinkExt;
 
-const ALLOWED_CLIENT_VERSIONS: &[&str] = &["0.3.4"];
+const ALLOWED_CLIENT_VERSIONS: &[&str] = &["0.4.0"];
 
 /// Checks if the connection is authenticated.
 /// If not, it sends an InvalidSession OP code and closes the connection.
@@ -135,9 +135,7 @@ pub async fn identify(
 
     session.authenticated = true;
 
-    for _ in 0..identify_data.advanced_generations {
-        test_request(websocket_sender, session, &server_channels).await;
-    }
+    test_request(websocket_sender, session, &server_channels).await;
 }
 
 /// Run if the an ID to test is triggered.
@@ -153,7 +151,7 @@ pub async fn test_request(
 ) {
     let id = server_channels.id_receiver.recv().unwrap(); // Get the ID
 
-    session.awaiting_results.push(id.clone()); // Add the ID to the awaiting results
+    session.awaiting_result = id.clone(); // Add the ID to the awaiting results
 
     websocket_sender
         .send_payload(bruty_share::Payload {
@@ -182,7 +180,7 @@ pub async fn testing_result(
         return;
     }
 
-    if session.awaiting_results.is_empty() {
+    if session.awaiting_result.is_empty() {
         // We aren't expecting any results
 
         websocket_sender
@@ -218,11 +216,11 @@ pub async fn testing_result(
         return;
     };
 
-    if !session.awaiting_results.contains(&testing_result_data.id) {
+    if session.awaiting_result != testing_result_data.id {
         // The result string is not what we are expecting
         log::warn!(
-            "Expected results for any of {:?}, got results for {:?} from {} (ID {}).",
-            session.awaiting_results,
+            "Expected results for {:?}, got results for {:?} from {} (ID {}).",
+            session.awaiting_result,
             testing_result_data.id,
             session.user.name,
             session.user.id
@@ -242,9 +240,7 @@ pub async fn testing_result(
         return;
     }
 
-    session
-        .awaiting_results
-        .retain(|id| id != &testing_result_data.id); // Remove the ID from the awaiting results
+    session.awaiting_result.clear(); // Clear the awaiting results
 
     test_request(websocket_sender, session, server_channels).await; // Request a new test
 

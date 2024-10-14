@@ -271,25 +271,20 @@ async fn handle_websocket(
         );
     }
 
-    if !session.awaiting_results.is_empty() {
+    if !session.awaiting_result.is_empty() {
         // We are awaiting results from this session, but it's gone. So, send the results to the next session.
-        for id in session.awaiting_results.iter() {
-            server_channels.id_sender.send(id.clone()).unwrap();
+        server_channels
+            .id_sender
+            .send(session.awaiting_result.clone())
+            .unwrap();
 
-            server_channels
-                .results_awaiting_sender
-                .send(id.clone())
-                .unwrap();
-        }
+        server_channels
+            .results_awaiting_sender
+            .send(session.awaiting_result.clone())
+            .unwrap();
 
         log::info!(
-            "Forwaded {} awaiting result{} from {} (ID {}) to the next session.",
-            session.awaiting_results.len(),
-            if session.awaiting_results.len() == 1 {
-                ""
-            } else {
-                "s"
-            },
+            "Forwaded awaiting result from {} (ID {}) to the next session.",
             session.user.name,
             session.user.id
         );
@@ -326,7 +321,7 @@ fn handle_connection(
                 websocket,
                 &mut bruty_share::types::Session {
                     authenticated: false,
-                    awaiting_results: Vec::new(),
+                    awaiting_result: vec![],
                     heartbeat_received: false,
                     user: bruty_share::types::User {
                         id: 0,
@@ -382,7 +377,6 @@ async fn main(
     let (results_sender, results_receiver) = flume::unbounded(); // Create a channel for when the server receives results, to send to the result handler.
     let (results_awaiting_sender, results_awaiting_receiver) = flume::unbounded(); // Create a channel for when the server is awaiting results.
     let (results_received_sender, results_received_receiver) = flume::unbounded(); // Create a channel for when the server receives results.
-    let (current_id_sender, current_id_receiver) = flume::bounded(1); // Create a channel for when the current project ID changes.
 
     let id_sender_clone = id_sender.clone();
     let results_awaiting_sender_clone = results_awaiting_sender.clone();
@@ -405,7 +399,6 @@ async fn main(
             &current_id_clone,
             &id_sender,
             &results_awaiting_sender,
-            &current_id_sender,
         );
     });
 
@@ -416,7 +409,6 @@ async fn main(
         server_threads::results_progress_handler(
             &results_awaiting_receiver,
             &results_received_receiver,
-            &current_id_receiver,
             persist_clone,
             &mut state,
         )

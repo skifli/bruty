@@ -70,14 +70,6 @@ struct Args {
         default_value_t = 512
     )]
     threads: u16,
-
-    #[arg(
-        short = 'a',
-        long = "advanced-generations",
-        help = "Number of IDs to be generated in advance (multiply by 64^2)",
-        default_value_t = 2
-    )]
-    advanced_generations: u16,
 }
 
 /// Handles a WebSocket message.
@@ -196,34 +188,25 @@ async fn handle_connection(
         results_sender,
     };
 
-    for _ in 0..args.advanced_generations {
-        let client_channels = client_channels.clone();
-
-        tokio::spawn(async move {
-            client_threads::generate_all_ids(&client_channels).await;
-        });
-    }
-
-    for _ in 0..args.threads {
-        let client_channels = client_channels.clone();
-        let reqwest_client = reqwest_client.clone();
-
-        tokio::spawn(async move {
-            client_threads::id_checker(&reqwest_client, &client_channels).await;
-        });
-    }
-
     let client_channels_clone = client_channels.clone();
 
     tokio::spawn(async move {
-        client_threads::results_handler(&client_channels_clone).await;
+        client_threads::generate_all_ids(&client_channels_clone).await;
     });
+
+    for _ in 0..args.threads {
+        let client_channels_clone = client_channels.clone();
+        let reqwest_client_clone = reqwest_client.clone();
+
+        tokio::spawn(async move {
+            client_threads::id_checker(&reqwest_client_clone, &client_channels_clone).await;
+        });
+    }
 
     websocket_sender
         .send_payload(bruty_share::Payload {
             op_code: bruty_share::OperationCode::Identify,
             data: bruty_share::Data::Identify(bruty_share::IdentifyData {
-                advanced_generations: args.advanced_generations,
                 client_version: VERSION.to_string(),
                 id: user.id,
                 secret: user.secret,

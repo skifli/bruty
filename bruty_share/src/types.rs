@@ -69,7 +69,7 @@ pub struct ClientChannels {
 #[derive(Clone)]
 pub struct Session {
     pub authenticated: bool,
-    pub awaiting_results: Vec<Vec<char>>,
+    pub awaiting_result: Vec<char>,
     pub heartbeat_received: bool,
     pub user: User,
 }

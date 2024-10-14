@@ -1,11 +1,10 @@
 [package]
 name = "bruty_client"
 authors = ["skifli"]
-version = "0.3.4"
+version = "0.4.0"
 edition = "2021"
 
 [dependencies]
-ahash = "0.8.11"
 bytes = "1.7.2"
 chrono = "0.4.38"
 clap = { version = "4.5.18", features = ["derive"] }

@@ -102,7 +102,6 @@ pub enum OperationCode {
 /// Data sent with an Identify OP code
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct IdentifyData {
-    pub advanced_generations: u16,
     pub client_version: String,
     pub id: u8,
     pub secret: String,
