@@ -4,6 +4,7 @@ use futures_util::SinkExt;
 use futures_util::StreamExt;
 use log;
 use shuttle_persist;
+use shuttle_runtime::SecretStore;
 use tokio;
 use warp;
 use warp::Filter;
