@@ -9,9 +9,9 @@ flume = "0.11.0"
 futures-util = "0.3.30"
 log = "0.4"
 rmp-serde = "1.1.2"
-shuttle-warp = "0.47.0"
-shuttle-persist = "0.47.0"
-shuttle-runtime = { version = "0.47.0", default-features = false }
+shuttle-warp = "0.49.0"
+shuttle-persist = "0.49.0"
+shuttle-runtime = { version = "0.49.0", default-features = false }
 tokio = { version = "1.40.0", features = ["full"] }
 warp = "0.3.7"
 

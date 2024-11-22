@@ -369,7 +369,19 @@ async fn main(
             .unwrap()
     );
 
-    let mut state: bruty_share::types::ServerState = persist.load("server_state").unwrap();
+    let mut state: bruty_share::types::ServerState =
+        persist.load("server_state").unwrap_or_else(|_| {
+            log::warn!("No server state found in the database, creating a new one.");
+
+            let state = bruty_share::types::ServerState {
+                starting_id: vec!['M', 'w', 'b', 'C'],
+                current_id: vec!['M', 'w', 'b', 'C'],
+            };
+
+            persist.save("server_state", state.clone()).unwrap();
+
+            state
+        });
 
     log::info!("Server State: {:?}", state);
 

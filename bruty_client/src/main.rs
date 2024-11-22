@@ -301,7 +301,7 @@ async fn create_connection(remote_url: &str, args: &Args) {
 #[tokio::main]
 async fn main() {
     let args: Args = Args::parse();
-    let remote_url = "wss://bruty.shuttleapp.rs/ivocord";
+    let remote_url = "wss://bruty-brej.shuttle.app/ivocord";
 
     bruty_share::logger::setup(
         true,
