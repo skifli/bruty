@@ -341,7 +341,7 @@ fn handle_connection(
 #[shuttle_runtime::main]
 async fn main(
     #[shuttle_persist::Persist] persist: shuttle_persist::PersistInstance,
-    #[shuttle_runtime::Secrets] secrets: shuttle_runtime::SecretStore,
+    #[shuttle_runtime::Secrets] secrets: SecretStore,
 ) -> shuttle_warp::ShuttleWarp<(impl warp::Reply,)> {
     bruty_share::logger::setup(true, None).unwrap(); // Setup logger without a file because we are in a server environment
 
