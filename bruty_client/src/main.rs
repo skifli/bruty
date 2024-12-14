@@ -12,6 +12,7 @@ use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 mod client_threads;
 mod payload_handlers;
 
+const REMOTE_URL_BASE: &str = "bruty-utpx.shuttle.app";
 const AUTHOR: &str = env!("CARGO_PKG_AUTHORS");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -301,7 +302,6 @@ async fn create_connection(remote_url: &str, args: &Args) {
 #[tokio::main]
 async fn main() {
     let args: Args = Args::parse();
-    let remote_url = "wss://bruty-brej.shuttle.app/ivocord";
 
     bruty_share::logger::setup(
         true,
@@ -319,7 +319,7 @@ async fn main() {
 
     loop {
         let req = server_status_client
-            .get("https://bruty.shuttleapp.rs/status")
+            .get(format!("https://{}/status", REMOTE_URL_BASE))
             .send()
             .await;
 
@@ -340,7 +340,7 @@ async fn main() {
 
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         } else {
-            create_connection(remote_url, &args).await;
+            create_connection(format!("wss://{}/ivocord", REMOTE_URL_BASE).as_str(), &args).await;
 
             log::warn!("Connection to server was lost, trying to connect again in 5 seconds.");
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
