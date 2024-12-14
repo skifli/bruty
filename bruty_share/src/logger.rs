@@ -81,7 +81,7 @@ pub fn setup(console: bool, log_file: Option<String>) -> Result<(), fern::InitEr
     logger
         .level_for("reqwest", log::LevelFilter::Warn)
         .level_for("tokio-tungstenite", log::LevelFilter::Warn)
-        .level_for("warp", log::LevelFilter::Warn)
+        .level_for("axum", log::LevelFilter::Warn)
         .apply()?;
 
     Ok(())
