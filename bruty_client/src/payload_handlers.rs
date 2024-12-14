@@ -56,7 +56,7 @@ pub async fn test_request_data(
             if positives.len() == 1 { "" } else { "s" },
             test_request_data.id.iter().collect::<String>(),
             elapsed_time,
-            2621440 / elapsed_time
+            2621440 / elapsed_time as i32
         );
 
         client_channels_clone

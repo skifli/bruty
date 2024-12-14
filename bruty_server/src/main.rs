@@ -393,7 +393,7 @@ async fn main(
     let (event_sender, event_receiver) = flume::unbounded();
 
     let server_data = bruty_share::types::ServerData {
-        current_id: std::sync::Arc::new(tokio::sync::Mutex::new(state.current_id.clone())),
+        current_id: std::sync::Arc::new(tokio::sync::Mutex::new(vec![])),
         event_receiver,
         event_sender,
         users,
