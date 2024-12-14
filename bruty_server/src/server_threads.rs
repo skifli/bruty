@@ -5,12 +5,19 @@
 /// * `current_id` - The ID we are on right now.
 /// * `id_sender` - The sender to send the current ID to (so it can be passed to client(s)).
 /// * `results_awaiting_sender` - The sender to send the current ID to (so we can make sure we get all the results we asked for).
+/// * `users_connected_num` - The number of users connected.
 pub fn permutation_generator(
     starting_id: &mut Vec<char>,
     current_id: &Vec<char>,
     id_sender: &flume::Sender<Vec<char>>,
     results_awaiting_sender: &flume::Sender<Vec<char>>,
+    users_connected_num: &std::sync::Arc<std::sync::atomic::AtomicU8>,
 ) {
+    while users_connected_num.load(std::sync::atomic::Ordering::SeqCst) == 0 {
+        // Sleep for users to connect
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+
     if starting_id.len() == 8 {
         while id_sender.len() > 1 {
             // Wait for IDs
@@ -42,7 +49,13 @@ pub fn permutation_generator(
             let mut new_id = starting_id.clone();
             new_id.push(chr);
 
-            permutation_generator(&mut new_id, current_id, id_sender, results_awaiting_sender);
+            permutation_generator(
+                &mut new_id,
+                current_id,
+                id_sender,
+                results_awaiting_sender,
+                users_connected_num,
+            );
         }
     }
 }
@@ -119,9 +132,7 @@ pub async fn results_progress_handler(
 /// # Arguments
 /// * `results_receiver` - The receiver for the results (of checking videos).
 pub async fn results_handler(results_receiver: flume::Receiver<Vec<bruty_share::types::Video>>) {
-    loop {
-        let results = results_receiver.recv().unwrap();
-
+    while let Ok(results) = results_receiver.recv_async().await {
         for result in results {
             match result.event {
                 bruty_share::types::VideoEvent::Success => {

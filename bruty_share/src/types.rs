@@ -52,6 +52,7 @@ pub struct ServerData {
     pub results_received_sender: flume::Sender<Vec<char>>,
     pub results_awaiting_sender: flume::Sender<Vec<char>>,
     pub users: Vec<User>,
+    pub users_connected_num: std::sync::Arc<std::sync::atomic::AtomicU8>,
 }
 
 #[derive(Clone)]

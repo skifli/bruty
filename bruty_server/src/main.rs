@@ -172,6 +172,10 @@ async fn handle_websocket(
         tokio::time::Instant::now() + tokio::time::Duration::from_secs(10),
     ));
 
+    server_data
+        .users_connected_num
+        .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
     loop {
         tokio::select! {
             result = websocket_receiver.next() => {
@@ -273,6 +277,10 @@ async fn handle_websocket(
             session.user.id,
         );
     }
+
+    server_data
+        .users_connected_num
+        .fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
 
     if !session.awaiting_result.is_empty() {
         // We are awaiting results from this session, but it's gone. So, send the results to the next session.
@@ -400,10 +408,13 @@ async fn main(
         results_received_sender,
         results_awaiting_sender: results_awaiting_sender_clone,
         users,
+        users_connected_num: std::sync::Arc::new(std::sync::atomic::AtomicU8::new(0)),
     }; // Bundle the server's sender channels for the websocket
 
     let mut starting_id_clone = state.starting_id.clone(); // Clone both for the permutation generator
     let current_id_clone = state.current_id.clone();
+
+    let users_connected_num_clone = server_data.users_connected_num.clone();
 
     // Start the permutation generator
     tokio::spawn(async move {
@@ -412,6 +423,7 @@ async fn main(
             &current_id_clone,
             &id_sender,
             &results_awaiting_sender,
+            &users_connected_num_clone,
         );
     });
 
