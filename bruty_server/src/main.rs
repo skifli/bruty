@@ -285,13 +285,10 @@ async fn handle_websocket(
     if !session.awaiting_result.is_empty() {
         // We are awaiting results from this session, but it's gone. So, send the results to the next session.
         server_data
-            .id_sender
-            .send(session.awaiting_result.clone())
-            .unwrap();
-
-        server_data
-            .results_awaiting_sender
-            .send(session.awaiting_result.clone())
+            .event_sender
+            .send(bruty_share::types::ServerEvent::ResultsAwaiting(
+                session.awaiting_result.clone(),
+            ))
             .unwrap();
 
         log::info!(
@@ -393,38 +390,30 @@ async fn main(
     log::info!("Users: {:?}", users);
     log::info!("Server State: {:?}", state);
 
-    let (id_sender, id_receiver) = flume::unbounded(); // Create a channel for when the current project ID changes.
-    let (results_sender, results_receiver) = flume::unbounded(); // Create a channel for when the server receives results, to send to the result handler.
-    let (results_awaiting_sender, results_awaiting_receiver) = flume::unbounded(); // Create a channel for when the server is awaiting results.
-    let (results_received_sender, results_received_receiver) = flume::unbounded(); // Create a channel for when the server receives results.
-
-    let id_sender_clone = id_sender.clone();
-    let results_awaiting_sender_clone = results_awaiting_sender.clone();
+    let (event_sender, event_receiver) = flume::unbounded();
 
     let server_data = bruty_share::types::ServerData {
-        id_receiver,
-        id_sender: id_sender_clone,
-        results_sender,
-        results_received_sender,
-        results_awaiting_sender: results_awaiting_sender_clone,
+        current_id: std::sync::Arc::new(tokio::sync::Mutex::new(state.current_id.clone())),
+        event_receiver,
+        event_sender,
         users,
         users_connected_num: std::sync::Arc::new(std::sync::atomic::AtomicU8::new(0)),
     }; // Bundle the server's sender channels for the websocket
 
-    let mut starting_id_clone = state.starting_id.clone(); // Clone both for the permutation generator
+    let mut starting_id_clone = state.starting_id.clone();
     let current_id_clone = state.current_id.clone();
-
-    let users_connected_num_clone = server_data.users_connected_num.clone();
+    let server_data_clone = server_data.clone();
+    let server_data_clone_clone = server_data.clone();
+    let server_data_clone_clone_clone = server_data.clone();
 
     // Start the permutation generator
     tokio::spawn(async move {
         server_threads::permutation_generator(
             &mut starting_id_clone,
             &current_id_clone,
-            &id_sender,
-            &results_awaiting_sender,
-            &users_connected_num_clone,
-        );
+            &server_data_clone_clone_clone,
+        )
+        .await;
     });
 
     /* let persist_clone = persist.clone(); // Clone for the results handler */
@@ -432,18 +421,15 @@ async fn main(
     // Start the results progress handler
     tokio::spawn(async move {
         server_threads::results_progress_handler(
-            &results_awaiting_receiver,
-            &results_received_receiver,
-            /* persist_clone, */
             &mut state,
+            &server_data_clone_clone,
+            /* persist_clone, */
         )
         .await;
     });
 
     // Start the results handler
-    tokio::spawn(async move {
-        server_threads::results_handler(results_receiver).await;
-    });
+    tokio::spawn(async move { server_threads::results_handler(&server_data_clone).await });
 
     let router = axum::Router::new()
         .route("/ivocord", axum::routing::get(handle_connection))

@@ -43,14 +43,20 @@ pub struct Video {
     pub video_data: Option<VideoData>, // Only present if Event is Success
 }
 
+/// Represents the different types of events that can occur.
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+pub enum ServerEvent {
+    ResultsAwaiting(Vec<char>),
+    ResultsReceived(Vec<char>),
+    PositiveResultsReceived(Vec<Video>),
+}
+
 /// Represents the server's channels.
 #[derive(Clone)]
 pub struct ServerData {
-    pub id_receiver: flume::Receiver<Vec<char>>,
-    pub id_sender: flume::Sender<Vec<char>>,
-    pub results_sender: flume::Sender<Vec<Video>>,
-    pub results_received_sender: flume::Sender<Vec<char>>,
-    pub results_awaiting_sender: flume::Sender<Vec<char>>,
+    pub current_id: std::sync::Arc<tokio::sync::Mutex<Vec<char>>>,
+    pub event_receiver: flume::Receiver<ServerEvent>,
+    pub event_sender: flume::Sender<ServerEvent>,
     pub users: Vec<User>,
     pub users_connected_num: std::sync::Arc<std::sync::atomic::AtomicU8>,
 }

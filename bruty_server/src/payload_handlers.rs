@@ -134,7 +134,7 @@ pub async fn identify(
     test_request(websocket_sender, session, &server_data).await;
 }
 
-/// Run if the an ID to test is triggered.
+/// Run if an ID to test is triggered.
 ///
 /// # Arguments
 /// * `websocket_sender` - The WebSocket sender.
@@ -145,9 +145,21 @@ pub async fn test_request(
     session: &mut bruty_share::types::Session,
     server_data: &bruty_share::types::ServerData,
 ) {
-    let id = server_data.id_receiver.recv().unwrap(); // Get the ID
+    let mut current_id_shared = server_data.current_id.lock().await; // Lock the current ID
 
-    session.awaiting_result = id.clone(); // Add the ID to the awaiting results
+    while current_id_shared.is_empty() {
+        drop(current_id_shared); // Drop the lock
+
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await; // Sleep for the current ID to be consumed
+
+        current_id_shared = server_data.current_id.lock().await; // Lock the current ID
+    }
+
+    let id = current_id_shared.clone(); // Clone the current ID
+    current_id_shared.clear(); // Clear the current ID
+    drop(current_id_shared); // Drop the lock
+
+    session.awaiting_result = id.clone(); // Set the ID to be awaited
 
     websocket_sender
         .send_payload(bruty_share::Payload {
@@ -241,12 +253,16 @@ pub async fn testing_result(
     test_request(websocket_sender, session, server_data).await; // Request a new test
 
     server_data
-        .results_received_sender
-        .send(testing_result_data.id)
-        .unwrap(); // Say we received the results
+        .event_sender
+        .send(bruty_share::types::ServerEvent::ResultsReceived(
+            testing_result_data.id.clone(),
+        ))
+        .unwrap(); // Send the event to the results handler
 
     server_data
-        .results_sender
-        .send(testing_result_data.positives)
-        .unwrap(); // Send the results to the results handler
+        .event_sender
+        .send(bruty_share::types::ServerEvent::PositiveResultsReceived(
+            testing_result_data.positives,
+        ))
+        .unwrap(); // Send the event to the results handler
 }
