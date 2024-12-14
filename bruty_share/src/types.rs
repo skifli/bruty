@@ -45,12 +45,13 @@ pub struct Video {
 
 /// Represents the server's channels.
 #[derive(Clone)]
-pub struct ServerChannels {
+pub struct ServerData {
     pub id_receiver: flume::Receiver<Vec<char>>,
     pub id_sender: flume::Sender<Vec<char>>,
     pub results_sender: flume::Sender<Vec<Video>>,
     pub results_received_sender: flume::Sender<Vec<char>>,
     pub results_awaiting_sender: flume::Sender<Vec<char>>,
+    pub users: Vec<User>,
 }
 
 #[derive(Clone)]

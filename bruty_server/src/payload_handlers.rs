@@ -44,18 +44,14 @@ async fn check_authenticated(
 /// * `payload` - The WebSocket payload.
 /// * `session` - The session of the connection.
 /// * `persist` - The database connection.
-/// * `server_channels` - The server's channels, used for communication between threads.
+/// * `server_data` - The server's data, with channels used for communication between threads.
 pub async fn identify(
     websocket_sender: &mut WebSocketSender,
     payload: bruty_share::Payload,
     session: &mut bruty_share::types::Session,
-    persist: &shuttle_persist::PersistInstance,
-    server_channels: &bruty_share::types::ServerChannels,
+    /* persist: &shuttle_persist::PersistInstance, */
+    server_data: &bruty_share::types::ServerData,
 ) {
-    let users = persist
-        .load::<Vec<bruty_share::types::User>>("users")
-        .unwrap();
-
     // Directly access the IdentifyData
     let identify_data = if let bruty_share::Data::Identify(data) = payload.data {
         data // Unwraps the IdentifyData directly
@@ -97,7 +93,7 @@ pub async fn identify(
 
     let mut authentication_failed = false;
 
-    if let Some(user) = users.iter().find(|u| u.id == identify_data.id) {
+    if let Some(user) = server_data.users.iter().find(|u| u.id == identify_data.id) {
         if user.secret == identify_data.secret {
             session.authenticated = true;
             session.user = user.clone(); // Clone the user into the session
@@ -135,7 +131,7 @@ pub async fn identify(
 
     session.authenticated = true;
 
-    test_request(websocket_sender, session, &server_channels).await;
+    test_request(websocket_sender, session, &server_data).await;
 }
 
 /// Run if the an ID to test is triggered.
@@ -143,13 +139,13 @@ pub async fn identify(
 /// # Arguments
 /// * `websocket_sender` - The WebSocket sender.
 /// * `session` - The session of the connection.
-/// * `server_channels` - The server's channels, used for communication between threads.
+/// * `server_data` - The server's data, with channels used for communication between threads.
 pub async fn test_request(
     websocket_sender: &mut WebSocketSender,
     session: &mut bruty_share::types::Session,
-    server_channels: &bruty_share::types::ServerChannels,
+    server_data: &bruty_share::types::ServerData,
 ) {
-    let id = server_channels.id_receiver.recv().unwrap(); // Get the ID
+    let id = server_data.id_receiver.recv().unwrap(); // Get the ID
 
     session.awaiting_result = id.clone(); // Add the ID to the awaiting results
 
@@ -169,12 +165,12 @@ pub async fn test_request(
 /// * `websocket_sender` - The WebSocket sender.
 /// * `payload` - The WebSocket payload.
 /// * `session` - The session of the connection.
-/// * `server_channels` - The server's channels, used for communication between threads.
+/// * `server_data` - The server's data, with channels used for communication between threads.
 pub async fn testing_result(
     websocket_sender: &mut WebSocketSender,
     payload: bruty_share::Payload,
     session: &mut bruty_share::types::Session,
-    server_channels: &bruty_share::types::ServerChannels,
+    server_data: &bruty_share::types::ServerData,
 ) {
     if !check_authenticated(websocket_sender, session).await {
         return;
@@ -242,14 +238,14 @@ pub async fn testing_result(
 
     session.awaiting_result.clear(); // Clear the awaiting results
 
-    test_request(websocket_sender, session, server_channels).await; // Request a new test
+    test_request(websocket_sender, session, server_data).await; // Request a new test
 
-    server_channels
+    server_data
         .results_received_sender
         .send(testing_result_data.id)
         .unwrap(); // Say we received the results
 
-    server_channels
+    server_data
         .results_sender
         .send(testing_result_data.positives)
         .unwrap(); // Send the results to the results handler

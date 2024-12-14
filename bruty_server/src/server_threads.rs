@@ -57,7 +57,7 @@ pub fn permutation_generator(
 pub async fn results_progress_handler(
     results_awaiting_receiver: &flume::Receiver<Vec<char>>,
     results_received_receiver: &flume::Receiver<Vec<char>>,
-    persist: shuttle_persist::PersistInstance,
+    /* persist: shuttle_persist::PersistInstance, */
     state: &mut bruty_share::types::ServerState,
 ) {
     let mut awaiting_results = Vec::new();
@@ -99,12 +99,14 @@ pub async fn results_progress_handler(
                     }){
                         state.current_id = current_id.clone(); // Set the current ID to the ID we just finished checking
 
-                        persist.save("server_state", state.clone()).unwrap(); // Save the current ID to the database
+                        /* persist.save("server_state", state.clone()).unwrap(); // Save the current ID to the database
 
                         log::info!(
                             "Finished checking {}",
                             state.current_id.iter().collect::<String>()
-                        );
+                        );  */
+
+                        log::info!("New server state is {:?}", state); // !REMOVE AFTER PERSIST IS RE-ENABLED
                     }
                 }
             },

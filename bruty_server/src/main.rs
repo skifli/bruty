@@ -3,7 +3,7 @@ use flume;
 use futures_util::SinkExt;
 use futures_util::StreamExt;
 use log;
-use shuttle_persist;
+/* use shuttle_persist; */
 use shuttle_runtime::SecretStore;
 use tokio;
 use warp;
@@ -57,7 +57,7 @@ impl SplitSinkExt for WebSocketSender {
 /// * `msg` - The WebSocket message.
 /// * `session` - The session of the connection.
 /// * `persist` - The database connection.
-/// * `server_channels` - The server's channels, used for communication between threads.
+/// * `server_data` - The server's data, with channels used for communication between threads.
 ///
 /// # Returns
 /// * `bool` - Whether the connection shouldn't be closed.
@@ -65,8 +65,8 @@ async fn handle_msg(
     websocket_sender: &mut WebSocketSender,
     msg: warp::ws::Message,
     session: &mut bruty_share::types::Session,
-    persist: &shuttle_persist::PersistInstance,
-    server_channels: &bruty_share::types::ServerChannels,
+    /* persist: &shuttle_persist::PersistInstance, */
+    server_data: &bruty_share::types::ServerData,
 ) -> bool {
     let payload: bruty_share::Payload = match rmp_serde::from_slice(&msg.as_bytes()) {
         Ok(payload) => payload,
@@ -105,15 +105,14 @@ async fn handle_msg(
                 websocket_sender,
                 payload,
                 session,
-                persist,
-                server_channels,
+                /* persist, */
+                server_data,
             )
             .await;
         }
         bruty_share::OperationCode::TestingResult => {
             // Process the test results
-            payload_handlers::testing_result(websocket_sender, payload, session, server_channels)
-                .await;
+            payload_handlers::testing_result(websocket_sender, payload, session, server_data).await;
         }
         bruty_share::OperationCode::TestRequestData
         | bruty_share::OperationCode::InvalidSession => {
@@ -156,12 +155,12 @@ async fn handle_msg(
 /// * `websocket` - The WebSocket connection.
 /// * `session` - The session of the connection.
 /// * `persist` - The database connection.
-/// * `server_channels` - The server's channels, used for communication between threads.
+/// * `server_data` - The server's data, with channels used for communication between threads.
 async fn handle_websocket(
     websocket: warp::ws::WebSocket,
     session: &mut bruty_share::types::Session,
-    persist: shuttle_persist::PersistInstance,
-    server_channels: bruty_share::types::ServerChannels,
+    /* persist: shuttle_persist::PersistInstance, */
+    server_data: bruty_share::types::ServerData,
 ) {
     log::info!("Established WebSocket connection");
 
@@ -200,8 +199,8 @@ async fn handle_websocket(
                         &mut websocket_sender,
                         msg,
                         session,
-                        &persist,
-                        &server_channels,
+                       /* &persist, */
+                        &server_data,
                     )
                     .await
                     {
@@ -274,12 +273,12 @@ async fn handle_websocket(
 
     if !session.awaiting_result.is_empty() {
         // We are awaiting results from this session, but it's gone. So, send the results to the next session.
-        server_channels
+        server_data
             .id_sender
             .send(session.awaiting_result.clone())
             .unwrap();
 
-        server_channels
+        server_data
             .results_awaiting_sender
             .send(session.awaiting_result.clone())
             .unwrap();
@@ -297,15 +296,15 @@ async fn handle_websocket(
 /// # Arguments
 /// * `ws` - The WebSocket upgrade.
 /// * `persist` - The database connection.
-/// * `server_channels` - The server's channels, used for communication between threads.
+/// * `server_data` - The server's data, with channels used for communication between threads.
 /// * `headers` - The headers of the request.
 ///
 /// # Returns
 /// * `impl warp::Reply` - The result of handling the connection.
 fn handle_connection(
     ws: warp::ws::Ws,
-    persist: shuttle_persist::PersistInstance,
-    server_channels: bruty_share::types::ServerChannels,
+    /* persist: shuttle_persist::PersistInstance, */
+    server_data: bruty_share::types::ServerData,
     headers: warp::http::HeaderMap,
 ) -> impl warp::Reply {
     ws.on_upgrade(move |websocket| async move {
@@ -330,8 +329,8 @@ fn handle_connection(
                         secret: "".to_string(),
                     },
                 },
-                persist,
-                server_channels,
+                /* persist, */
+                server_data,
             )
             .await;
         }
@@ -340,7 +339,7 @@ fn handle_connection(
 
 #[shuttle_runtime::main]
 async fn main(
-    #[shuttle_persist::Persist] persist: shuttle_persist::PersistInstance,
+    /* #[shuttle_persist::Persist] persist: shuttle_persist::PersistInstance, */
     #[shuttle_runtime::Secrets] secrets: SecretStore,
 ) -> shuttle_warp::ShuttleWarp<(impl warp::Reply,)> {
     bruty_share::logger::setup(true, None).unwrap(); // Setup logger without a file because we are in a server environment
@@ -361,15 +360,7 @@ async fn main(
         });
     }
 
-    persist.save("users", users).unwrap();
-
-    log::info!(
-        "Users: {:?}",
-        persist
-            .load::<Vec<bruty_share::types::User>>("users")
-            .unwrap()
-    );
-
+    /*
     let mut state: bruty_share::types::ServerState =
         persist.load("server_state").unwrap_or_else(|_| {
             log::warn!("No server state found in the database, creating a new one.");
@@ -383,7 +374,14 @@ async fn main(
 
             state
         });
+    */
 
+    let mut state = bruty_share::types::ServerState {
+        starting_id: vec!['M', 'w', 'b', 'C'],
+        current_id: vec!['M', 'w', 'b', 'C'],
+    }; // !REMOVE AFTER PERSIST IS RE-ENABLED
+
+    log::info!("Users: {:?}", users);
     log::info!("Server State: {:?}", state);
 
     let (id_sender, id_receiver) = flume::unbounded(); // Create a channel for when the current project ID changes.
@@ -394,12 +392,13 @@ async fn main(
     let id_sender_clone = id_sender.clone();
     let results_awaiting_sender_clone = results_awaiting_sender.clone();
 
-    let server_channels = bruty_share::types::ServerChannels {
+    let server_data = bruty_share::types::ServerData {
         id_receiver,
         id_sender: id_sender_clone,
         results_sender,
         results_received_sender,
         results_awaiting_sender: results_awaiting_sender_clone,
+        users,
     }; // Bundle the server's sender channels for the websocket
 
     let mut starting_id_clone = state.starting_id.clone(); // Clone both for the permutation generator
@@ -415,14 +414,14 @@ async fn main(
         );
     });
 
-    let persist_clone = persist.clone(); // Clone for the results handler
+    /* let persist_clone = persist.clone(); // Clone for the results handler */
 
     // Start the results progress handler
     tokio::spawn(async move {
         server_threads::results_progress_handler(
             &results_awaiting_receiver,
             &results_received_receiver,
-            persist_clone,
+            /* persist_clone, */
             &mut state,
         )
         .await;
@@ -436,15 +435,15 @@ async fn main(
     // Creates the WebSocket route
     let websocket = warp::path("ivocord")
         .and(warp::ws()) // Make the route a WebSocket route
-        .and(warp::any().map(move || persist.clone())) // Clone the persist instance
-        .and(warp::any().map(move || server_channels.clone())) // Clone the server's sender channels
+        /* .and(warp::any().map(move || persist.clone())) // Clone the persist instance */
+        .and(warp::any().map(move || server_data.clone())) // Clone the server's sender channels
         .and(warp::header::headers_cloned()) // Get the headers of the request
         .map(
             |ws: warp::ws::Ws,
-             persist: shuttle_persist::PersistInstance,
-             server_channels: bruty_share::types::ServerChannels,
+             /* persist: shuttle_persist::PersistInstance, */
+             server_data: bruty_share::types::ServerData,
              headers: warp::http::HeaderMap| {
-                handle_connection(ws, persist, server_channels, headers)
+                handle_connection(ws, /* persist , */ server_data, headers)
             },
         ); // Handle the connection
 
