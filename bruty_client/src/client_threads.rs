@@ -31,6 +31,7 @@ pub async fn id_checker(
                 .await;
 
             if response.is_err() {
+                // log::warn!("Response err'd while checking ID: {}. Retrying...", id_str);
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
                 continue;
@@ -80,7 +81,7 @@ pub async fn id_checker(
                 }
                 _ => {
                     log::warn!(
-                        "Error occurred while checking ID: {} ({}). Retrying...",
+                        "Unexpected status code while checking ID: {} ({}). Retrying...",
                         id_str,
                         response.status().as_u16()
                     );

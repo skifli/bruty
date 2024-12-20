@@ -64,6 +64,7 @@ struct Args {
     /// The secret used for authentication.
     secret: String,
 
+    /// The number of threads to use.
     #[arg(
         short = 't',
         long = "threads",
@@ -171,7 +172,10 @@ async fn handle_connection(
 ) {
     let (mut websocket_sender, mut websocket_receiver) = websocket_stream.split();
 
-    let reqwest_client = reqwest::Client::new();
+    let reqwest_client = reqwest::Client::builder()
+        .timeout(core::time::Duration::from_millis(1000))
+        .build()
+        .unwrap();
 
     let (base_id_sender, base_id_receiver) = flume::unbounded();
     let (id_sender, id_receiver) = flume::unbounded();
