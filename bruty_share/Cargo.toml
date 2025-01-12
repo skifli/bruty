@@ -7,10 +7,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-chrono = "0.4.38"
-fern = { version = "0.6", features = ["colored"] }
-flume = "0.11.0"
-log = "0.4"
-serde = { version = "1.0.217", features = ["derive"] }
-shuttle-shared-db = { version = "0.51.0", features = ["opendal-postgres"] }
-tokio = { version = "1.40.0", features = ["full"] }
+chrono = { workspace = true }
+fern = { workspace = true, features = ["colored"] }
+flume = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+shuttle-shared-db = { workspace = true, features = ["opendal-postgres"] }
+tokio = { workspace = true, features = ["full"] }

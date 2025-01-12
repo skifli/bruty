@@ -5,17 +5,17 @@ version = "0.5.1"
 edition = "2021"
 
 [dependencies]
-bytes = "1.7.2"
-chrono = "0.4.38"
-clap = { version = "4.5.18", features = ["derive"] }
-flume = "0.11.0"
-futures = "0.3.30"
-futures-util = "0.3.30"
-log = "0.4"
-reqwest = "0.12.7"
-rmp-serde = "1.1.2"
-sonic-rs = "0.3"
-tokio = { version = "1.40.0", features = ["full"] }
-tokio-tungstenite = { version = "0.24.0", features = ["native-tls"] }
+bytes = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+flume = { workspace = true }
+futures = { workspace = true }
+futures-util = { workspace = true }
+log = { workspace = true }
+reqwest = { workspace = true }
+rmp-serde = { workspace = true }
+sonic-rs = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tokio-tungstenite = { workspace = true, features = ["native-tls"] }
 
 bruty_share = { path = "../bruty_share" }

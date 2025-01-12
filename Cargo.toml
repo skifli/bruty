@@ -6,3 +6,24 @@ members = [
     "./bruty_server/",
     "./bruty_share"
 ]
+
+[workspace.dependencies]
+axum = "0.8.1"
+bytes = "1.7.2"
+chrono = "0.4.38"
+clap = "4.5.18"
+fern = "0.6"
+flume = "0.11.0"
+futures = "0.3.30"
+futures-util = "0.3.30"
+log = "0.4"
+opendal = "0.51"
+reqwest = "0.12.7"
+rmp-serde = "1.1.2"
+serde = "1.0.217"
+shuttle-axum = "0.51.0"
+shuttle-runtime = "0.51.0"
+shuttle-shared-db = "0.51.0"
+sonic-rs = "0.3"
+tokio = "1.40.0"
+tokio-tungstenite = "0.24.0"

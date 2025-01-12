@@ -5,15 +5,15 @@ version = "0.5.1"
 edition = "2021"
 
 [dependencies]
-axum = { version = "0.8.1", features = ["ws"] }
-flume = "0.11.0"
-futures-util = "0.3.30"
-log = "0.4"
-opendal = "0.51"
-rmp-serde = "1.1.2"
-shuttle-axum = "0.51.0"
-shuttle-runtime = "0.51.0"
-shuttle-shared-db = { version = "0.51.0", features = ["opendal-postgres"] }
-tokio = { version = "1.40.0", features = ["full"] }
+axum = { workspace = true, features = ["ws"] }
+flume = { workspace = true }
+futures-util = { workspace = true }
+log = { workspace = true }
+opendal = { workspace = true }
+rmp-serde = { workspace = true }
+shuttle-axum = { workspace = true }
+shuttle-runtime = { workspace = true }
+shuttle-shared-db = { workspace = true, features = ["opendal-postgres"] }
+tokio = { workspace = true, features = ["full"] }
 
 bruty_share = { path = "../bruty_share" }
