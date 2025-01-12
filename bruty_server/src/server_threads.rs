@@ -62,7 +62,7 @@ pub async fn permutation_generator(
             let mut new_id = current_id.clone();
             new_id.push(chr);
 
-            Box::pin(permutation_generator(starting_id, &mut new_id, server_data)).await;
+            permutation_generator(starting_id, &mut new_id, server_data).await;
         }
     }
 }
