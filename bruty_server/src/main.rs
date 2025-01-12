@@ -453,8 +453,7 @@ async fn main(
             &server_state_starting_id,
             &server_state_current_id,
             &server_data_clone_clone_clone,
-        )
-        .await;
+        );
     });
 
     // Start the results progress handler
