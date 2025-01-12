@@ -158,9 +158,7 @@ async fn handle_websocket(
     let mut abruptly_closed = false;
     let mut manually_closed = false;
 
-    let mut heartbeat_timer = Box::pin(tokio::time::sleep_until(
-        tokio::time::Instant::now() + tokio::time::Duration::from_secs(10),
-    ));
+    let mut ticker = tokio::time::interval(tokio::time::Duration::from_secs(10));
 
     server_data
         .users_connected_num
@@ -214,7 +212,7 @@ async fn handle_websocket(
                     }
                 }
             }
-            _ = &mut heartbeat_timer => {
+            _ = ticker.tick() => {
                 if !session.heartbeat_received {
                     // The client didn't send a heartbeat in time
                     log::warn!("Heartbeat not received from {} (ID {}).", session.user.name, session.user.id);
@@ -237,10 +235,6 @@ async fn handle_websocket(
                 }
 
                 session.heartbeat_received = false;
-
-                heartbeat_timer = Box::pin(tokio::time::sleep_until(
-                    tokio::time::Instant::now() + tokio::time::Duration::from_secs(10),
-                ));
             }
         }
     }
@@ -302,7 +296,7 @@ async fn handle_connection(
     headers: axum::http::HeaderMap,
     server_data: axum::extract::Extension<bruty_share::types::ServerData>,
 ) -> impl axum::response::IntoResponse {
-    ws.on_upgrade(move |mut websocket| async move {
+    ws.on_upgrade(move |websocket| async move {
         let user_agent = headers
             .get("user-agent")
             .map(|ua| ua.to_str().unwrap())
