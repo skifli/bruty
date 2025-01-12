@@ -1,10 +1,15 @@
 use crate::Payload;
 
-/// Represents the server's state.
-#[derive(Clone, std::fmt::Debug, serde::Deserialize, serde::Serialize)]
+/// Represents the server's state operator.
+#[derive(Debug)]
 pub struct ServerState {
-    pub current_id: Vec<char>,
-    pub starting_id: Vec<char>,
+    pub operator: shuttle_shared_db::SerdeJsonOperator,
+}
+
+// Represents an inner value in the server's state.
+#[derive(serde::Deserialize, serde::Serialize)]
+pub struct ServerStateInner {
+    pub inner: Vec<char>,
 }
 
 // Represents when a user joins or leaves.
@@ -20,7 +25,7 @@ pub struct UserEvent {
 }
 
 /// Represents what type of video event occurred.
-#[derive(Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum VideoEvent {
     Success,
     NotEmbeddable,
@@ -28,7 +33,7 @@ pub enum VideoEvent {
 }
 
 /// Represents video data.
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 pub struct VideoData {
     pub title: String,
     pub author_name: String,
@@ -36,7 +41,7 @@ pub struct VideoData {
 }
 
 // Represents a video event.
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 pub struct Video {
     pub event: VideoEvent,
     pub id: Vec<char>,                 // ID that was tested
@@ -44,7 +49,7 @@ pub struct Video {
 }
 
 /// Represents the different types of events that can occur.
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 pub enum ServerEvent {
     ResultsAwaiting(Vec<char>),
     ResultsReceived(Vec<char>),

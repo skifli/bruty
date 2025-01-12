@@ -5,7 +5,7 @@
 /// * `current_id` - The ID we are on right now.
 /// * `server_data` - The server's data.
 pub async fn permutation_generator(
-    starting_id: &mut Vec<char>,
+    starting_id: &Vec<char>,
     current_id: &Vec<char>,
     server_data: &bruty_share::types::ServerData,
 ) {
@@ -18,7 +18,7 @@ pub async fn permutation_generator(
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
 
-    if starting_id.len() == 8 {
+    if current_id.len() == 8 {
         let mut current_id_shared = server_data.current_id.lock().await; // Lock the current ID
 
         while !current_id_shared.is_empty() {
@@ -32,18 +32,18 @@ pub async fn permutation_generator(
         server_data
             .event_sender
             .send(bruty_share::types::ServerEvent::ResultsAwaiting(
-                starting_id.clone(),
+                current_id.clone(),
             ))
             .unwrap(); // Send the ID so the results handler knows we are awaiting it
 
-        *current_id_shared = starting_id.clone(); // Set the current ID to the starting ID
+        *current_id_shared = current_id.clone(); // Set the current ID to the starting ID
         drop(current_id_shared); // Drop the lock
     } else {
         for &chr in bruty_share::VALID_CHARS {
-            if current_id.len() > starting_id.len() {
-                // Check if current_id starts with starting_id
+            if starting_id.len() > current_id.len() {
+                // Check if starting_id starts with current_id
                 // If not, we've moved on to a new ID
-                if current_id.starts_with(starting_id) {
+                if starting_id.starts_with(current_id) {
                     // If the character is before where we left off, skip it
                     if bruty_share::VALID_CHARS
                         .iter()
@@ -51,7 +51,7 @@ pub async fn permutation_generator(
                         .unwrap()
                         < bruty_share::VALID_CHARS
                             .iter()
-                            .position(|&x| x == current_id[starting_id.len()])
+                            .position(|&x| x == starting_id[current_id.len()])
                             .unwrap()
                     {
                         continue; // Skip this character because it's before the current character
@@ -59,10 +59,10 @@ pub async fn permutation_generator(
                 }
             }
 
-            let mut new_id = starting_id.clone();
+            let mut new_id = current_id.clone();
             new_id.push(chr);
 
-            Box::pin(permutation_generator(&mut new_id, current_id, server_data)).await;
+            Box::pin(permutation_generator(starting_id, &mut new_id, server_data)).await;
         }
     }
 }
@@ -70,13 +70,11 @@ pub async fn permutation_generator(
 /// Handles the progress of the results.
 ///
 /// # Arguments
-/// * `server_data` - The server's data.
-/// * `persist` - The database connection.
 /// * `state` - The server's state.
+/// * `server_data` - The server's data.
 pub async fn results_progress_handler(
     state: &mut bruty_share::types::ServerState,
     server_data: &bruty_share::types::ServerData,
-    /* persist: shuttle_persist::PersistInstance, */
 ) {
     let mut awaiting_results = Vec::new();
 
@@ -113,16 +111,21 @@ pub async fn results_progress_handler(
 
                     return true;
                 }) {
-                    state.current_id = current_id.clone(); // Set the current ID to the ID we just finished checking
-
-                    /* persist.save("server_state", state.clone()).unwrap(); // Save the current ID to the database
+                    state
+                        .operator
+                        .write_serialized(
+                            "current_id",
+                            &bruty_share::types::ServerStateInner {
+                                inner: current_id.clone(),
+                            },
+                        )
+                        .await
+                        .unwrap(); // Set the current ID to the ID we just finished checking
 
                     log::info!(
                         "Finished checking {}",
-                        state.current_id.iter().collect::<String>()
-                    );  */
-
-                    log::info!("New server state is {:?}", state); // !REMOVE AFTER PERSIST IS RE-ENABLED
+                        current_id.iter().collect::<String>()
+                    );
                 }
             }
             _ => {}

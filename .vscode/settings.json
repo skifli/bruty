@@ -12,6 +12,7 @@
         "fern",
         "flume",
         "ivocord",
+        "opendal",
         "reqwest",
         "skifli",
         "tungstenite"

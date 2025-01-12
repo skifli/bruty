@@ -4,7 +4,6 @@ use flume;
 use futures_util::SinkExt;
 use futures_util::StreamExt;
 use log;
-/* use shuttle_persist; */
 use shuttle_runtime::SecretStore;
 use tokio;
 
@@ -32,17 +31,19 @@ pub trait SplitSinkExt {
     ) -> impl std::future::Future<Output = std::result::Result<(), axum::Error>>;
 }
 
-/// An extension trait for `SplitStream` that adds methods for receiving payloads.
 impl SplitSinkExt for WebSocketSender {
     async fn send_payload(
         &mut self,
         payload: bruty_share::Payload,
     ) -> std::result::Result<(), axum::Error> {
         self.send(axum::extract::ws::Message::Binary(
-            rmp_serde::to_vec(&payload).unwrap_or_else(|err| {
-                log::error!("Failed to serialize payload: {}.", err);
-                vec![]
-            }),
+            rmp_serde::to_vec(&payload)
+                .unwrap_or_else(|err| {
+                    log::error!("Failed to serialize payload: {}.", err);
+
+                    vec![]
+                })
+                .into(),
         ))
         .await
     }
@@ -55,7 +56,6 @@ impl SplitSinkExt for WebSocketSender {
 /// * `websocket_sender` - The WebSocket sender.
 /// * `msg` - The WebSocket message.
 /// * `session` - The session of the connection.
-/// * `persist` - The database connection.
 /// * `server_data` - The server's data, with channels used for communication between threads.
 ///
 /// # Returns
@@ -64,7 +64,6 @@ async fn handle_msg(
     websocket_sender: &mut WebSocketSender,
     binary_msg: Vec<u8>,
     session: &mut bruty_share::types::Session,
-    /* persist: &shuttle_persist::PersistInstance, */
     server_data: &bruty_share::types::ServerData,
 ) -> bool {
     let payload: bruty_share::Payload = match rmp_serde::from_slice(&binary_msg) {
@@ -100,14 +99,7 @@ async fn handle_msg(
         }
         bruty_share::OperationCode::Identify => {
             // Identifies the client
-            payload_handlers::identify(
-                websocket_sender,
-                payload,
-                session,
-                /* persist, */
-                server_data,
-            )
-            .await;
+            payload_handlers::identify(websocket_sender, payload, session, server_data).await;
         }
         bruty_share::OperationCode::TestingResult => {
             // Process the test results
@@ -153,12 +145,10 @@ async fn handle_msg(
 /// # Arguments
 /// * `websocket` - The WebSocket connection.
 /// * `session` - The session of the connection.
-/// * `persist` - The database connection.
 /// * `server_data` - The server's data, with channels used for communication between threads.
 async fn handle_websocket(
     websocket: axum::extract::ws::WebSocket,
     session: &mut bruty_share::types::Session,
-    /* persist: shuttle_persist::PersistInstance, */
     server_data: bruty_share::types::ServerData,
 ) {
     log::info!("Established WebSocket connection");
@@ -201,9 +191,8 @@ async fn handle_websocket(
                         // Binary WebSocket message received
                         if !handle_msg(
                             &mut websocket_sender,
-                            binary_msg,
+                            binary_msg.to_vec(),
                             session,
-                            /* &persist, */
                             &server_data,
                         )
                         .await
@@ -303,7 +292,6 @@ async fn handle_websocket(
 ///
 /// # Arguments
 /// * `ws` - The WebSocket upgrade.
-/// * `persist` - The database connection.
 /// * `server_data` - The server's data, with channels used for communication between threads.
 /// * `headers` - The headers of the request.
 ///
@@ -312,10 +300,9 @@ async fn handle_websocket(
 async fn handle_connection(
     ws: axum::extract::WebSocketUpgrade,
     headers: axum::http::HeaderMap,
-    /* persist: axum::extract::Extension<shuttle_persist::PersistInstance>, */
     server_data: axum::extract::Extension<bruty_share::types::ServerData>,
 ) -> impl axum::response::IntoResponse {
-    ws.on_upgrade(move |websocket| async move {
+    ws.on_upgrade(move |mut websocket| async move {
         let user_agent = headers
             .get("user-agent")
             .map(|ua| ua.to_str().unwrap())
@@ -323,6 +310,7 @@ async fn handle_connection(
 
         if user_agent != "bruty" {
             log::info!("Rejected TCP connection with user agent {}.", user_agent);
+
             websocket.close().await.unwrap();
         } else {
             handle_websocket(
@@ -337,7 +325,6 @@ async fn handle_connection(
                         secret: "".to_string(),
                     },
                 },
-                /* persist.0, */
                 server_data.0,
             )
             .await;
@@ -347,7 +334,7 @@ async fn handle_connection(
 
 #[shuttle_runtime::main]
 async fn main(
-    /* #[shuttle_persist::Persist] persist: shuttle_persist::PersistInstance, */
+    #[shuttle_shared_db::Postgres] operator: shuttle_shared_db::SerdeJsonOperator,
     #[shuttle_runtime::Secrets] secrets: SecretStore,
 ) -> shuttle_axum::ShuttleAxum {
     log::info!("Bruty Server v{} by {}.", VERSION, AUTHOR);
@@ -366,29 +353,85 @@ async fn main(
         });
     }
 
-    /*
-    let mut state: bruty_share::types::ServerState =
-        persist.load("server_state").unwrap_or_else(|_| {
-            log::warn!("No server state found in the database, creating a new one.");
+    // Create the struct holding the operator for the server state
+    let mut server_state = bruty_share::types::ServerState { operator };
+    // Get the starting ID we should start from this time (if its a new run)
+    let secrets_starting_id: Vec<char> = secrets.get("STARTING_ID").unwrap().chars().collect();
 
-            let state = bruty_share::types::ServerState {
-                starting_id: vec!['M', 'w', 'b', 'C'],
-                current_id: vec!['M', 'w', 'b', 'C'],
-            };
+    // Get the starting ID we started from last time
+    let server_state_starting_id: Vec<char> = match server_state
+        .operator
+        .read_serialized::<bruty_share::types::ServerStateInner>("starting_id")
+        .await
+    {
+        Ok(state_inner) => state_inner.inner,
+        Err(err) => match err.kind() {
+            opendal::ErrorKind::NotFound => {
+                log::warn!("Starting ID not found in the database. Defaulting to [].");
 
-            persist.save("server_state", state.clone()).unwrap();
+                vec![]
+            }
+            _ => {
+                log::error!(
+                    "Unexpected error while reading the starting ID from server state: {}.",
+                    err
+                );
 
-            state
-        });
-    */
+                std::process::exit(1);
+            }
+        },
+    };
 
-    let mut state = bruty_share::types::ServerState {
-        starting_id: vec!['M', 'w', 'b', 'C'],
-        current_id: vec!['M', 'w', 'b', 'C'],
-    }; // !REMOVE AFTER PERSIST IS RE-ENABLED
+    if server_state_starting_id.is_empty() || secrets_starting_id != server_state_starting_id {
+        // We are starting a new run for the first time || The starting ID has changed
+        server_state
+            .operator
+            .write_serialized(
+                "starting_id",
+                &bruty_share::types::ServerStateInner {
+                    inner: secrets_starting_id.clone(),
+                },
+            )
+            .await
+            .unwrap();
+
+        server_state
+            .operator
+            .write_serialized(
+                "current_id",
+                &bruty_share::types::ServerStateInner { inner: vec![] },
+            )
+            .await
+            .unwrap();
+    }
+
+    let server_state_current_id = server_state
+        .operator
+        .read_serialized::<bruty_share::types::ServerStateInner>("current_id")
+        .await
+        .unwrap_or_else(|err| {
+            match err.kind() {
+                opendal::ErrorKind::NotFound => {
+                    log::warn!("Current ID not found in the database, which should be impossible at this point. Exiting.");
+                }
+                _ => {
+                    log::error!(
+                        "Unexpected error while reading the current ID from server state: {}.",
+                        err
+                    );
+                }
+            }
+
+            std::process::exit(1);
+        })
+        .inner;
 
     log::info!("Users: {:?}", users);
-    log::info!("Server State: {:?}", state);
+    log::info!(
+        "Current ID: {:?}, Starting ID: {:?}",
+        server_state_current_id,
+        server_state_starting_id
+    );
 
     let (event_sender, event_receiver) = flume::unbounded();
 
@@ -400,8 +443,6 @@ async fn main(
         users_connected_num: std::sync::Arc::new(std::sync::atomic::AtomicU8::new(0)),
     }; // Bundle the server's sender channels for the websocket
 
-    let mut starting_id_clone = state.starting_id.clone();
-    let current_id_clone = state.current_id.clone();
     let server_data_clone = server_data.clone();
     let server_data_clone_clone = server_data.clone();
     let server_data_clone_clone_clone = server_data.clone();
@@ -409,23 +450,16 @@ async fn main(
     // Start the permutation generator
     tokio::spawn(async move {
         server_threads::permutation_generator(
-            &mut starting_id_clone,
-            &current_id_clone,
+            &server_state_starting_id,
+            &server_state_current_id,
             &server_data_clone_clone_clone,
         )
         .await;
     });
 
-    /* let persist_clone = persist.clone(); // Clone for the results handler */
-
     // Start the results progress handler
     tokio::spawn(async move {
-        server_threads::results_progress_handler(
-            &mut state,
-            &server_data_clone_clone,
-            /* persist_clone, */
-        )
-        .await;
+        server_threads::results_progress_handler(&mut server_state, &server_data_clone_clone).await;
     });
 
     // Start the results handler
@@ -433,7 +467,6 @@ async fn main(
 
     let router = axum::Router::new()
         .route("/ivocord", axum::routing::get(handle_connection))
-        /* .layer(axum::Extension(persist)) */
         .layer(axum::Extension(server_data))
         .route("/status", axum::routing::get(|| async { "OK" }));
 

@@ -11,7 +11,7 @@ pub const VALID_CHARS: &[char] = &[
 ];
 
 /// Error codes sent with an InvalidSession OP code
-#[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, PartialEq)]
 pub enum ErrorCode {
     UnknownError,
     UnexpectedOP,
@@ -85,7 +85,7 @@ impl ErrorCode {
 }
 
 /// WebSocket OP codes. Comments show client action and description.
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub enum OperationCode {
     /// Send | Heartbeat
     Heartbeat,
@@ -100,26 +100,26 @@ pub enum OperationCode {
 }
 
 /// Data sent with an Identify OP code
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct IdentifyData {
     pub client_version: String,
     pub id: u8,
     pub secret: String,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct TestRequestData {
     pub id: Vec<char>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct TestingResultData {
     pub id: Vec<char>,
     pub positives: Vec<types::Video>,
 }
 
 /// Data sent with an InvalidSession OP code
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct InvalidSessionData {
     pub code: ErrorCode,
     pub description: String,
@@ -127,7 +127,7 @@ pub struct InvalidSessionData {
 }
 
 /// WebSocket payload data
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub enum Data {
     Heartbeat,
     Identify(IdentifyData),
@@ -137,7 +137,7 @@ pub enum Data {
 }
 
 /// Represents a WebSocket payload
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct Payload {
     pub op_code: OperationCode,
     pub data: Data,

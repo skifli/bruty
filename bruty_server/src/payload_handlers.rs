@@ -1,7 +1,7 @@
 use crate::{SplitSinkExt, WebSocketSender};
 use futures_util::SinkExt;
 
-const ALLOWED_CLIENT_VERSIONS: &[&str] = &["0.5.0"];
+const ALLOWED_CLIENT_VERSIONS: &[&str] = &["0.5.1"];
 
 /// Checks if the connection is authenticated.
 /// If not, it sends an InvalidSession OP code and closes the connection.
@@ -43,13 +43,11 @@ async fn check_authenticated(
 /// * `websocket_sender` - The WebSocket sender.
 /// * `payload` - The WebSocket payload.
 /// * `session` - The session of the connection.
-/// * `persist` - The database connection.
 /// * `server_data` - The server's data, with channels used for communication between threads.
 pub async fn identify(
     websocket_sender: &mut WebSocketSender,
     payload: bruty_share::Payload,
     session: &mut bruty_share::types::Session,
-    /* persist: &shuttle_persist::PersistInstance, */
     server_data: &bruty_share::types::ServerData,
 ) {
     // Directly access the IdentifyData
