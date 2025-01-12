@@ -296,7 +296,7 @@ async fn handle_connection(
     headers: axum::http::HeaderMap,
     server_data: axum::extract::Extension<bruty_share::types::ServerData>,
 ) -> impl axum::response::IntoResponse {
-    ws.on_upgrade(move |mut websocket| async move {
+    ws.on_upgrade(move |websocket| async move {
         let user_agent = headers
             .get("user-agent")
             .map(|ua| ua.to_str().unwrap())
