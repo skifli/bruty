@@ -359,14 +359,21 @@ async fn main(
         .await
     {
         Ok(state_inner) => state_inner.inner,
-        Err(err) => {
-            log::error!(
-                "Unexpected error while reading the starting ID from server state: {}. Defaulting to empty.",
-                err
-            ); // Really should differentiate between a new run and an error here...
+        Err(err) => match err.kind() {
+            opendal::ErrorKind::NotFound => {
+                log::warn!("Starting ID not found in the database. Defaulting to [].");
 
-            vec![]
-        }
+                vec![]
+            }
+            _ => {
+                log::error!(
+                    "Unexpected error while reading the starting ID from server state: {}.",
+                    err
+                );
+
+                std::process::exit(1);
+            }
+        },
     };
 
     if server_state_starting_id.is_empty() || secrets_starting_id != server_state_starting_id {
@@ -397,10 +404,17 @@ async fn main(
         .read_serialized::<bruty_share::types::ServerStateInner>("current_id")
         .await
         .unwrap_or_else(|err| {
-            log::error!(
-                "Unexpected error while reading the current ID from server state: {}.",
-                err
-            );
+            match err.kind() {
+                opendal::ErrorKind::NotFound => {
+                    log::warn!("Current ID not found in the database, which should be impossible at this point. Exiting.");
+                }
+                _ => {
+                    log::error!(
+                        "Unexpected error while reading the current ID from server state: {}.",
+                        err
+                    );
+                }
+            }
 
             std::process::exit(1);
         })
