@@ -1,1 +1,1 @@
-shuttle run -p 80 --external -r
+shuttle deploy --secrets Secrets.toml
