@@ -437,7 +437,8 @@ async fn main(
             &starting_id,
             &current_id,
             &server_data_clone_clone_clone,
-        );
+        )
+        .await;
     });
 
     // Start the results progress handler
