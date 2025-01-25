@@ -4,7 +4,7 @@
 /// * `id` - The (base) ID to generate permutations for.
 /// * `current_id` - The ID we are on right now.
 /// * `server_data` - The server's data.
-pub fn permutation_generator(
+pub async fn permutation_generator(
     starting_id: &Vec<char>,
     current_id: &Vec<char>,
     server_data: &bruty_share::types::ServerData,
@@ -15,18 +15,18 @@ pub fn permutation_generator(
         == 0
     {
         // Sleep for users to connect
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
 
     if current_id.len() == 8 {
-        let mut current_id_shared = server_data.current_id.blocking_lock(); // Lock the current ID
+        let mut current_id_shared = server_data.current_id.lock().await; // Lock the current ID
 
         while !current_id_shared.is_empty() {
             drop(current_id_shared); // Drop the lock
 
             std::thread::sleep(std::time::Duration::from_secs(1)); // Sleep for the current ID to be consumed
 
-            current_id_shared = server_data.current_id.blocking_lock(); // Lock the current ID
+            current_id_shared = server_data.current_id.lock().await; // Lock the current ID
         }
 
         server_data
@@ -62,7 +62,7 @@ pub fn permutation_generator(
             let mut new_id = current_id.clone();
             new_id.push(chr);
 
-            permutation_generator(starting_id, &mut new_id, server_data);
+            Box::pin(permutation_generator(starting_id, &mut new_id, server_data)).await;
         }
     }
 }
