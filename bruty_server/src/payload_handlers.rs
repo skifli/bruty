@@ -1,7 +1,7 @@
 use crate::{SplitSinkExt, WebSocketSender};
 use futures_util::SinkExt;
 
-const ALLOWED_CLIENT_VERSIONS: &[&str] = &["0.6.1"];
+const ALLOWED_CLIENT_VERSIONS: &[&str] = &["0.6.2"];
 
 /// Checks if the connection is authenticated.
 /// If not, it sends an InvalidSession OP code and closes the connection.
@@ -146,6 +146,8 @@ pub async fn test_request(
     let id = server_data.current_id_receiver.recv().await.unwrap(); // Get the current ID to test
 
     session.awaiting_result = id.clone(); // Set the ID to be awaited
+
+    log::info!("Sending {} to be tested", id.iter().collect::<String>());
 
     websocket_sender
         .send_payload(bruty_share::Payload {

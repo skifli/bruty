@@ -270,11 +270,10 @@ async fn handle_websocket(
     if !session.awaiting_result.is_empty() {
         // We are awaiting results from this session, but it's gone. So, send the results to the next session.
         server_data
-            .event_sender
-            .send(bruty_share::types::ServerEvent::ResultsAwaiting(
-                session.awaiting_result.clone(),
-            ))
-            .unwrap();
+            .current_id_sender
+            .send(session.awaiting_result.clone())
+            .await
+            .unwrap(); // Send the ID to be tested
 
         log::info!(
             "Forwarded awaiting result from {} (ID {}) to the next session.",
