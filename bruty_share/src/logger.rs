@@ -50,7 +50,7 @@ fn create_file_logger(log_file: String) -> fern::Dispatch {
                 message
             ))
         })
-        .level(log::LevelFilter::Debug)
+        .level(log::LevelFilter::Info)
         .chain(
             std::fs::OpenOptions::new()
                 .append(true)
@@ -79,7 +79,9 @@ pub fn setup(console: bool, log_file: Option<String>) -> Result<(), fern::InitEr
     }
 
     logger
+        .level_for("hyper", log::LevelFilter::Warn)
         .level_for("reqwest", log::LevelFilter::Warn)
+        .level_for("tokio", log::LevelFilter::Warn)
         .level_for("tokio-tungstenite", log::LevelFilter::Warn)
         .level_for("axum", log::LevelFilter::Warn)
         .apply()?;
