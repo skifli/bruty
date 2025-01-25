@@ -3,7 +3,7 @@ use crate::Payload;
 /// Represents the server's state operator.
 #[derive(Debug)]
 pub struct ServerState {
-    pub operator: shuttle_shared_db::SerdeJsonOperator,
+    pub operator: sqlx::PgPool,
 }
 
 // Represents an inner value in the server's state.

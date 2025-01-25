@@ -15,6 +15,7 @@
         "opendal",
         "reqwest",
         "skifli",
+        "sqlx",
         "tungstenite"
     ],
     "editor.bracketPairColorization.enabled": true,

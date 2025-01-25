@@ -5,6 +5,7 @@ use futures_util::SinkExt;
 use futures_util::StreamExt;
 use log;
 use shuttle_runtime::SecretStore;
+use sqlx;
 use tokio;
 
 mod payload_handlers;
@@ -328,9 +329,14 @@ async fn handle_connection(
 
 #[shuttle_runtime::main]
 async fn main(
-    #[shuttle_shared_db::Postgres] operator: shuttle_shared_db::SerdeJsonOperator,
+    #[shuttle_shared_db::Postgres] pool: sqlx::PgPool,
     #[shuttle_runtime::Secrets] secrets: SecretStore,
 ) -> shuttle_axum::ShuttleAxum {
+    sqlx::migrate!()
+        .run(&pool)
+        .await
+        .expect("Failed to run migrations");
+
     log::info!("Bruty Server v{} by {}.", VERSION, AUTHOR);
 
     let users_vec: Vec<char> = secrets.get("USERS").unwrap().chars().collect();

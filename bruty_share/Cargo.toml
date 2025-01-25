@@ -12,5 +12,5 @@ fern = { workspace = true, features = ["colored"] }
 flume = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-shuttle-shared-db = { workspace = true, features = ["opendal-postgres"] }
+sqlx = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

@@ -13,7 +13,8 @@ opendal = { workspace = true }
 rmp-serde = { workspace = true }
 shuttle-axum = { workspace = true }
 shuttle-runtime = { workspace = true }
-shuttle-shared-db = { workspace = true, features = ["opendal-postgres"] }
+shuttle-shared-db = { workspace = true, features = ["postgres", "sqlx"] }
+sqlx = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 
 bruty_share = { path = "../bruty_share" }
