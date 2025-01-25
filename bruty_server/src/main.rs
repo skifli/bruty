@@ -160,6 +160,7 @@ async fn handle_websocket(
     let mut manually_closed = false;
 
     let mut ticker = tokio::time::interval(tokio::time::Duration::from_secs(10));
+    ticker.tick().await; // Skip the initial tick
 
     server_data
         .users_connected_num

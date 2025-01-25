@@ -1,7 +1,7 @@
 use crate::{SplitSinkExt, WebSocketSender};
 use futures_util::SinkExt;
 
-const ALLOWED_CLIENT_VERSIONS: &[&str] = &["0.5.1"];
+const ALLOWED_CLIENT_VERSIONS: &[&str] = &["0.6.0"];
 
 /// Checks if the connection is authenticated.
 /// If not, it sends an InvalidSession OP code and closes the connection.
