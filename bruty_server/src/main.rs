@@ -416,10 +416,12 @@ async fn main(
         current_id
     );
 
+    let (current_id_sender, current_id_receiver) = async_channel::bounded(10);
     let (event_sender, event_receiver) = flume::unbounded();
 
     let server_data = bruty_share::types::ServerData {
-        current_id: std::sync::Arc::new(tokio::sync::Mutex::new(vec![])),
+        current_id_receiver,
+        current_id_sender,
         event_receiver,
         event_sender,
         users,

@@ -1,12 +1,13 @@
 [package]
 name = "bruty_share"
 authors = ["skifli"]
-version = "0.6.0"
+version = "0.6.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-channel = { workspace = true }
 chrono = { workspace = true }
 fern = { workspace = true, features = ["colored"] }
 flume = { workspace = true }

@@ -1,7 +1,7 @@
 use crate::{SplitSinkExt, WebSocketSender};
 use futures_util::SinkExt;
 
-const ALLOWED_CLIENT_VERSIONS: &[&str] = &["0.6.0"];
+const ALLOWED_CLIENT_VERSIONS: &[&str] = &["0.6.1"];
 
 /// Checks if the connection is authenticated.
 /// If not, it sends an InvalidSession OP code and closes the connection.
@@ -143,19 +143,7 @@ pub async fn test_request(
     session: &mut bruty_share::types::Session,
     server_data: &bruty_share::types::ServerData,
 ) {
-    let mut current_id_shared = server_data.current_id.lock().await; // Lock the current ID
-
-    while current_id_shared.is_empty() {
-        drop(current_id_shared); // Drop the lock
-
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await; // Sleep for the current ID to be consumed
-
-        current_id_shared = server_data.current_id.lock().await; // Lock the current ID
-    }
-
-    let id = current_id_shared.clone(); // Clone the current ID
-    current_id_shared.clear(); // Clear the current ID
-    drop(current_id_shared); // Drop the lock
+    let id = server_data.current_id_receiver.recv().await.unwrap(); // Get the current ID to test
 
     session.awaiting_result = id.clone(); // Set the ID to be awaited
 

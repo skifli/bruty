@@ -19,16 +19,6 @@ pub async fn permutation_generator(
     }
 
     if current_id.len() == 8 {
-        let mut current_id_shared = server_data.current_id.lock().await; // Lock the current ID
-
-        while !current_id_shared.is_empty() {
-            drop(current_id_shared); // Drop the lock
-
-            std::thread::sleep(std::time::Duration::from_secs(1)); // Sleep for the current ID to be consumed
-
-            current_id_shared = server_data.current_id.lock().await; // Lock the current ID
-        }
-
         server_data
             .event_sender
             .send(bruty_share::types::ServerEvent::ResultsAwaiting(
@@ -36,8 +26,11 @@ pub async fn permutation_generator(
             ))
             .unwrap(); // Send the ID so the results handler knows we are awaiting it
 
-        *current_id_shared = current_id.clone(); // Set the current ID to the starting ID
-        drop(current_id_shared); // Drop the lock
+        server_data
+            .current_id_sender
+            .send(current_id.clone())
+            .await
+            .unwrap(); // Send the ID to be tested
     } else {
         for &chr in bruty_share::VALID_CHARS {
             if starting_id.len() > current_id.len() {

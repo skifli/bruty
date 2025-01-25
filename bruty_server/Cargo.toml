@@ -1,10 +1,11 @@
 [package]
 name = "bruty_server"
 authors = ["skifli"]
-version = "0.6.0"
+version = "0.6.1"
 edition = "2021"
 
 [dependencies]
+async-channel = { workspace = true }
 axum = { workspace = true, features = ["ws"] }
 flume = { workspace = true }
 futures-util = { workspace = true }

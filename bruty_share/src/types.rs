@@ -59,7 +59,8 @@ pub enum ServerEvent {
 /// Represents the server's channels.
 #[derive(Clone)]
 pub struct ServerData {
-    pub current_id: std::sync::Arc<tokio::sync::Mutex<Vec<char>>>,
+    pub current_id_receiver: async_channel::Receiver<Vec<char>>, // Only here because it's a bit easier than putting in ClientChannels and also having to pass that around everywhere
+    pub current_id_sender: async_channel::Sender<Vec<char>>,
     pub event_receiver: flume::Receiver<ServerEvent>,
     pub event_sender: flume::Sender<ServerEvent>,
     pub users: Vec<User>,
