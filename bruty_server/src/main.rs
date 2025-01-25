@@ -5,7 +5,7 @@ use futures_util::SinkExt;
 use futures_util::StreamExt;
 use log;
 use shuttle_runtime::SecretStore;
-use sqlx;
+use sqlx::{self, Row};
 use tokio;
 
 mod payload_handlers;
@@ -335,7 +335,7 @@ async fn main(
     sqlx::migrate!()
         .run(&pool)
         .await
-        .expect("Failed to run migrations");
+        .expect("Failed to run migrations on database");
 
     log::info!("Bruty Server v{} by {}.", VERSION, AUTHOR);
 
@@ -354,26 +354,52 @@ async fn main(
     }
 
     // Create the struct holding the operator for the server state
-    let mut server_state = bruty_share::types::ServerState { operator };
+    let mut server_state = bruty_share::types::ServerState { pool };
+
     // Get the starting ID we should start from this time (if its a new run)
-    let secrets_starting_id: Vec<char> = secrets.get("STARTING_ID").unwrap().chars().collect();
+    let starting_id: Vec<char> = secrets.get("STARTING_ID").unwrap().chars().collect();
 
     // Get the starting ID we started from last time
-    let server_state_starting_id: Vec<char> = match server_state
-        .operator
-        .read_serialized::<bruty_share::types::ServerStateInner>("starting_id")
-        .await
+    let current_id: Vec<char> = match sqlx::query(
+        "SELECT current_id FROM ids WHERE starting_id = $1",
+    )
+    .bind(starting_id.iter().collect::<String>())
+    .fetch_optional(&server_state.pool)
+    .await
     {
-        Ok(state_inner) => state_inner.inner,
-        Err(err) => match err.kind() {
-            opendal::ErrorKind::NotFound => {
-                log::warn!("Starting ID not found in the database. Defaulting to [].");
+        Ok(row) => match row {
+            Some(row) => {
+                let current_id: String = row.get("current_id");
 
-                vec![]
+                current_id.chars().collect()
+            }
+            None => {
+                log::warn!("Starting ID was found in database, but current ID was None. Defaulting to starting ID.");
+
+                sqlx::query("UPDATE ids SET current_id = $1 WHERE starting_id = $1")
+                    .bind(starting_id.iter().collect::<String>())
+                    .execute(&server_state.pool)
+                    .await
+                    .unwrap();
+
+                starting_id.clone()
+            }
+        },
+        Err(err) => match err {
+            sqlx::Error::RowNotFound => {
+                log::warn!("Starting ID not found in database. Creating a new row.");
+
+                sqlx::query("INSERT INTO ids (starting_id, current_id) VALUES ($1, $1)")
+                    .bind(starting_id.iter().collect::<String>())
+                    .execute(&server_state.pool)
+                    .await
+                    .unwrap();
+
+                starting_id.clone()
             }
             _ => {
                 log::error!(
-                    "Unexpected error while reading the starting ID from server state: {}.",
+                    "Unexpected error while reading the starting ID from database: {}.",
                     err
                 );
 
@@ -382,55 +408,11 @@ async fn main(
         },
     };
 
-    if server_state_starting_id.is_empty() || secrets_starting_id != server_state_starting_id {
-        // We are starting a new run for the first time || The starting ID has changed
-        server_state
-            .operator
-            .write_serialized(
-                "starting_id",
-                &bruty_share::types::ServerStateInner {
-                    inner: secrets_starting_id.clone(),
-                },
-            )
-            .await
-            .unwrap();
-
-        server_state
-            .operator
-            .write_serialized(
-                "current_id",
-                &bruty_share::types::ServerStateInner { inner: vec![] },
-            )
-            .await
-            .unwrap();
-    }
-
-    let server_state_current_id = server_state
-        .operator
-        .read_serialized::<bruty_share::types::ServerStateInner>("current_id")
-        .await
-        .unwrap_or_else(|err| {
-            match err.kind() {
-                opendal::ErrorKind::NotFound => {
-                    log::warn!("Current ID not found in the database, which should be impossible at this point. Exiting.");
-                }
-                _ => {
-                    log::error!(
-                        "Unexpected error while reading the current ID from server state: {}.",
-                        err
-                    );
-                }
-            }
-
-            std::process::exit(1);
-        })
-        .inner;
-
     log::info!("Users: {:?}", users);
     log::info!(
-        "Current ID: {:?}, Starting ID: {:?}",
-        server_state_current_id,
-        server_state_starting_id
+        "Starting ID: {:?}, Current ID: {:?}",
+        starting_id,
+        current_id
     );
 
     let (event_sender, event_receiver) = flume::unbounded();
@@ -446,19 +428,25 @@ async fn main(
     let server_data_clone = server_data.clone();
     let server_data_clone_clone = server_data.clone();
     let server_data_clone_clone_clone = server_data.clone();
+    let starting_id_clone = starting_id.clone();
 
     // Start the permutation generator
     tokio::spawn(async move {
         server_threads::permutation_generator(
-            &server_state_starting_id,
-            &server_state_current_id,
+            &starting_id,
+            &current_id,
             &server_data_clone_clone_clone,
         );
     });
 
     // Start the results progress handler
     tokio::spawn(async move {
-        server_threads::results_progress_handler(&mut server_state, &server_data_clone_clone).await;
+        server_threads::results_progress_handler(
+            &mut server_state,
+            &server_data_clone_clone,
+            &starting_id_clone,
+        )
+        .await;
     });
 
     // Start the results handler

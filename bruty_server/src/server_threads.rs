@@ -72,9 +72,11 @@ pub fn permutation_generator(
 /// # Arguments
 /// * `state` - The server's state.
 /// * `server_data` - The server's data.
+/// * `starting_id` - The starting ID.
 pub async fn results_progress_handler(
     state: &mut bruty_share::types::ServerState,
     server_data: &bruty_share::types::ServerData,
+    starting_id: &Vec<char>,
 ) {
     let mut awaiting_results = Vec::new();
 
@@ -111,14 +113,10 @@ pub async fn results_progress_handler(
 
                     return true;
                 }) {
-                    state
-                        .operator
-                        .write_serialized(
-                            "current_id",
-                            &bruty_share::types::ServerStateInner {
-                                inner: current_id.clone(),
-                            },
-                        )
+                    sqlx::query("UPDATE ids SET current_id = $1 WHERE starting_id = $2")
+                        .bind(current_id.iter().collect::<String>())
+                        .bind(starting_id.iter().collect::<String>())
+                        .execute(&state.pool)
                         .await
                         .unwrap(); // Set the current ID to the ID we just finished checking
 
