@@ -1,3 +1,11 @@
+# Bruty
+
+A **YouTube video ID brute-forcer** that uses a **client-server architecture** to *efficiently* generate and *validate* video IDs. Can be used to find **unlisted** videos, at *rates* of up to **15K** IDs *per* **client** *per* **second**.
+
+For architecture, please see the [architecture.md](architecture.md) file.
+
+## Usage
+
 Run the binary in the format `path_to_binary {ID} {SECRET}`, where:
 - **ID** is your ID.
 - **SECRET** is your SECRET, which I gave you.
