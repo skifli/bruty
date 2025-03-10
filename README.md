@@ -4,6 +4,9 @@ A **YouTube video ID brute-forcer** that uses a **client-server architecture** t
 
 For architecture, please see the [architecture.md](architecture.md) file.
 
+> [!NOTE]\
+> The program can be tested using the ID `0`, and the password `password`.
+
 ## Usage
 
 Run the binary in the format `path_to_binary {ID} {SECRET}`, where:
