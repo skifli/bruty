@@ -81,15 +81,21 @@ pub async fn results_progress_handler(
                 }
             }
             bruty_share::types::ServerEvent::ResultsReceived(id) => {
-                log::info!("Received results for {}", id.iter().collect::<String>());
-
                 let id_index = awaiting_results.iter().position(|x| x == &id);
 
                 if id_index.is_none() {
-                    log::warn!("Received results for an ID that wasn't awaiting results");
+                    log::warn!(
+                        "Received not awaiting results for {}",
+                        id.iter().collect::<String>()
+                    );
 
                     continue;
                 }
+
+                log::info!(
+                    "Received awaiting results for {}",
+                    id.iter().collect::<String>()
+                );
 
                 let current_id = awaiting_results.remove(id_index.unwrap()); // Remove the ID from the list of awaiting results
 
