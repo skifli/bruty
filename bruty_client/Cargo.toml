@@ -1,21 +1,10 @@
 [package]
 name = "bruty_client"
 authors = ["skifli"]
-version = "0.6.3"
+version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-bytes = { workspace = true }
-chrono = { workspace = true }
-clap = { workspace = true, features = ["derive"] }
-flume = { workspace = true }
-futures = { workspace = true }
-futures-util = { workspace = true }
-log = { workspace = true }
-reqwest = { workspace = true }
-rmp-serde = { workspace = true }
-sonic-rs = { workspace = true }
-tokio = { workspace = true, features = ["full"] }
-tokio-tungstenite = { workspace = true, features = ["native-tls"] }
+
 
 bruty_share = { path = "../bruty_share" }

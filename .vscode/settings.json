@@ -1,22 +1,7 @@
 {
     "cSpell.language": "en-GB",
     "cSpell.words": [
-        "ahash",
-        "axum",
         "bruty",
-        "chrono",
-        "color",
-        "colored",
-        "colors",
-        "fastwebsockets",
-        "fern",
-        "flume",
-        "ivocord",
-        "opendal",
-        "reqwest",
-        "skifli",
-        "sqlx",
-        "tungstenite"
     ],
     "editor.bracketPairColorization.enabled": true,
     "editor.cursorBlinking": "smooth",
@@ -41,5 +26,4 @@
     "workbench.colorTheme": "Dainty – One Dark Pro (chroma 0, lightness 1)",
     "workbench.iconTheme": "material-icon-theme",
     "workbench.list.smoothScrolling": true,
-    "workbench.productIconTheme": "fluent-icons",
 }

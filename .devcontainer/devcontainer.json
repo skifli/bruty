@@ -1,3 +1,3 @@
 {
-    "postCreateCommand": "curl https://sh.rustup.rs -sSf | sh -s -- -y && curl -sSfL https://www.shuttle.dev/install | bash"
+    "postCreateCommand": "curl https://sh.rustup.rs -sSf | sh -s -- -y"
 }

@@ -1,21 +1,10 @@
 [package]
 name = "bruty_server"
 authors = ["skifli"]
-version = "0.6.3"
+version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-async-channel = { workspace = true }
-axum = { workspace = true, features = ["ws"] }
-flume = { workspace = true }
-futures-util = { workspace = true }
-log = { workspace = true }
-opendal = { workspace = true }
-rmp-serde = { workspace = true }
-shuttle-axum = { workspace = true }
-shuttle-runtime = { workspace = true }
-shuttle-shared-db = { workspace = true, features = ["postgres", "sqlx"] }
-sqlx = { workspace = true }
-tokio = { workspace = true, features = ["full"] }
+
 
 bruty_share = { path = "../bruty_share" }

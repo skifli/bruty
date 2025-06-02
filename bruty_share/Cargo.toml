@@ -1,18 +1,10 @@
 [package]
 name = "bruty_share"
 authors = ["skifli"]
-version = "0.6.3"
+version = "0.0.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-channel = { workspace = true }
-chrono = { workspace = true }
-fern = { workspace = true, features = ["colored"] }
-flume = { workspace = true }
-log = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
-shuttle-shared-db = { workspace = true, features = ["postgres", "sqlx"] }
-sqlx = { workspace = true }
-tokio = { workspace = true, features = ["full"] }
+
