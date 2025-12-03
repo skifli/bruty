@@ -12,7 +12,6 @@ use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 mod client_threads;
 mod payload_handlers;
 
-const REMOTE_URL_BASE: &str = "bruty-utpx.shuttle.app";
 const AUTHOR: &str = env!("CARGO_PKG_AUTHORS");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -63,6 +62,14 @@ struct Args {
 
     /// The secret used for authentication.
     secret: String,
+
+    /// The server base URL (without scheme).
+    #[arg(
+        short = 's',
+        long = "server",
+        help = "Server hostname"
+    )]
+    server: String,
 
     /// The number of threads to use.
     #[arg(
@@ -323,7 +330,7 @@ async fn main() {
 
     loop {
         let req = server_status_client
-            .get(format!("https://{}/status", REMOTE_URL_BASE))
+            .get(format!("https://{}/status", args.server))
             .send()
             .await;
 
@@ -344,7 +351,7 @@ async fn main() {
 
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         } else {
-            create_connection(format!("wss://{}/ivocord", REMOTE_URL_BASE).as_str(), &args).await;
+            create_connection(format!("wss://{}/ivocord", args.server).as_str(), &args).await;
 
             log::warn!("Connection to server was lost, trying to connect again in 5 seconds.");
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
