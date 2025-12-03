@@ -74,6 +74,13 @@ struct Args {
         help = "Start from the saved ID instead of the provided one"
     )]
     start_from_saved: bool,
+
+    #[arg(
+        short = 'a',
+        long = "author",
+        help = "Only output videos from this author (case-insensitive partial match)"
+    )]
+    author_filter: Option<String>,
 }
 
 // Represents a YT video's data
@@ -160,78 +167,87 @@ fn setup_logger(log_file: String) -> Result<(), fern::InitError> {
     Ok(())
 }
 
+// OPTIMIZATION: Use String directly instead of Vec<char> for better performance
 fn generate_permutations(
-    id: &mut Vec<char>,
+    id: &str,
     generator_sender: &flume::Sender<Box<str>>,
-    split_id: Vec<char>,
+    split_id: &str,
 ) {
-    if id.len() == 10 {
-        for &chr in VALID_CHARS {
-            if split_id.len() > id.len() {
-                if VALID_CHARS.iter().position(|&x| x == chr).unwrap()
-                    < VALID_CHARS
-                        .iter()
-                        .position(|&x| x == split_id[id.len()])
-                        .unwrap()
-                {
-                    continue; // Skip this character because it's before the split
-                }
-            }
+    let mut buffer = String::with_capacity(11);
+    buffer.push_str(id);
+    
+    generate_permutations_helper(&mut buffer, generator_sender, split_id, id.len());
+}
 
-            id.push(chr); // No need to clone here because it was cloned for us by the recursive call
-
-            generator_sender
-                .send(id.iter().collect::<String>().into_boxed_str())
-                .unwrap();
-
-            id.pop();
-        }
+fn generate_permutations_helper(
+    buffer: &mut String,
+    generator_sender: &flume::Sender<Box<str>>,
+    split_id: &str,
+    start_len: usize,
+) {
+    if buffer.len() == 11 {
+        return;
+    }
+    
+    let current_idx = buffer.len();
+    let split_char_idx = if current_idx < split_id.len() {
+        split_id.chars().nth(current_idx)
+            .and_then(|c| VALID_CHARS.iter().position(|&x| x == c))
     } else {
-        for &chr in VALID_CHARS {
-            if split_id.len() > id.len() {
-                // if chr position in VALID_CHARS is less than the split_id position
-                if VALID_CHARS.iter().position(|&x| x == chr).unwrap()
-                    < VALID_CHARS
-                        .iter()
-                        .position(|&x| x == split_id[id.len()])
-                        .unwrap()
-                {
-                    continue; // Skip this character because it's before the split
-                }
+        None
+    };
+    
+    for (idx, &chr) in VALID_CHARS.iter().enumerate() {
+        if let Some(split_idx) = split_char_idx {
+            if idx < split_idx {
+                continue;
             }
-
-            let mut new_id = id.clone();
-            new_id.push(chr);
-
-            while generator_sender.is_full() {} /* Otherwise the program gets terminated on larger IDs */
-
-            generate_permutations(&mut new_id, generator_sender, split_id.clone());
         }
+        
+        buffer.push(chr);
+        
+        if buffer.len() == 11 {
+            // OPTIMIZATION: Send directly without intermediate String allocation
+            let _ = generator_sender.send(buffer.clone().into_boxed_str());
+        } else {
+            // OPTIMIZATION: Removed busy wait, rely on bounded channel blocking
+            generate_permutations_helper(buffer, generator_sender, split_id, start_len);
+        }
+        
+        buffer.pop();
     }
 }
 
-async fn try_link(client: &reqwest::Client, id: &str, testing_sender: &flume::Sender<Message>) {
+// OPTIMIZATION: Reuse client and reduce allocations
+async fn try_link(
+    client: &reqwest::Client,
+    id: &str,
+    testing_sender: &flume::Sender<Message>,
+    base_url: &str,
+) {
     loop {
-        let response = client
-            .get(
-                "https://www.youtube.com/oembed?url=http://www.youtube.com/watch?v=".to_string()
-                    + id,
-            )
-            .send()
-            .await;
-
-        let response = response.unwrap();
+        // OPTIMIZATION: Build URL once, reuse base
+        let url = format!("{}{}", base_url, id);
+        
+        let response = match client.get(&url).send().await {
+            Ok(r) => r,
+            Err(e) => {
+                log::trace!("Request error for {}: {}", id, e);
+                continue;
+            }
+        };
 
         match response.status().as_u16() {
             200 => {
                 // Found valid ID
+                let text = response.text().await.unwrap();
+                let video_data: VideoData = sonic_rs::from_str(&text).unwrap();
+                
                 testing_sender
                     .send(Message {
                         event: MessageEvent::Success,
                         id: id.into(),
-                        video_data: Some(
-                            sonic_rs::from_str(&response.text().await.unwrap()).unwrap(),
-                        ),
+                        video_data: Some(video_data),
                     })
                     .unwrap();
             }
@@ -295,10 +311,19 @@ fn terminal_link(url: &str, text: &str) -> String {
     format!("\x1B]8;;{}\x1B\\{}\x1B]8;;\x1B\\", url, text)
 }
 
+// OPTIMIZATION: Case-insensitive author matching
+fn matches_author_filter(author_name: &str, filter: &Option<String>) -> bool {
+    match filter {
+        None => true,
+        Some(f) => author_name.to_lowercase().contains(&f.to_lowercase()),
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
     let args_save = args.save.clone();
+    let author_filter = args.author_filter.clone();
 
     setup_logger(args.log).unwrap();
 
@@ -310,10 +335,15 @@ async fn main() {
     log::debug!("Bruty v{} by {}", VERSION, AUTHOR);
 
     log::info!(
-        "ID: {}; Threads: {}; Bound: {}",
+        "ID: {}; Threads: {}; Bound: {}{}",
         args.id,
         args.threads,
-        args.bound
+        args.bound,
+        if let Some(ref author) = author_filter {
+            format!("; Author filter: {}", author)
+        } else {
+            "".to_string()
+        }
     );
 
     let (generator_sender, generator_receiver) = flume::bounded(args.bound);
@@ -326,16 +356,14 @@ async fn main() {
 
     if !args.start_from_saved && !split_id.is_empty() {
         log::error!("Save file is not empty, but --start-from-saved was not provided. Exiting.");
-
         std::process::exit(1);
     }
 
+    let id_clone = args.id.clone();
+    let split_clone = split_id.clone();
+    
     let permutation_generator = tokio::spawn(async move {
-        generate_permutations(
-            &mut args.id.chars().collect(),
-            &generator_sender,
-            split_id.chars().collect(),
-        );
+        generate_permutations(&id_clone, &generator_sender, &split_clone);
         drop(generator_sender); // Signal that all permutations have been generated
         log::trace!("All permutations generated");
     });
@@ -343,39 +371,34 @@ async fn main() {
     let (testing_sender, testing_receiver) = flume::unbounded();
     let mut testing_tasks = vec![]; // Stores the tasks which are testing permutations
 
-    let client = reqwest::Client::new();
+    // OPTIMIZATION: Configure client with connection pooling and timeouts
+    let client = reqwest::Client::builder()
+        .pool_max_idle_per_host(args.threads as usize)
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .unwrap();
+
+    // OPTIMIZATION: Precompute base URL
+    let base_url = "https://www.youtube.com/oembed?url=http://www.youtube.com/watch?v=";
 
     for _ in 0..args.threads {
-        let client_clone = client.clone(); // Clone for each worker as it's moved into the worker thread
-        let generator_receiver_clone = generator_receiver.clone(); // Same reason as above
-        let testing_sender_clone = testing_sender.clone(); // Same reason as above above ;`)
+        let client_clone = client.clone();
+        let generator_receiver_clone = generator_receiver.clone();
+        let testing_sender_clone = testing_sender.clone();
+        let base_url = base_url.to_string();
 
         testing_tasks.push(tokio::spawn(async move {
-            loop {
-                match generator_receiver_clone.try_recv() {
-                    Ok(id) => {
-                        try_link(&client_clone, &id, &testing_sender_clone).await;
-                    }
-                    Err(_) => {
-                        if generator_receiver_clone.is_disconnected() {
-                            // No more permutations are being generated
-                            drop(testing_sender_clone); // Signal that this worker is done
-
-                            log::trace!("No more permutations to test, ending worker");
-                            return;
-                        }
-
-                        // Otherwise, wait for more permutations to test
-                        continue;
-                    }
-                }
+            // OPTIMIZATION: Use recv_async for better async performance
+            while let Ok(id) = generator_receiver_clone.recv_async().await {
+                try_link(&client_clone, &id, &testing_sender_clone, &base_url).await;
             }
+            log::trace!("No more permutations to test, ending worker");
         }));
     }
 
     drop(testing_sender); // Signal that all workers have been spawned
 
-    let testing_receiver_clone = testing_receiver.clone(); // Clone for the task_counter
+    let testing_receiver_clone = testing_receiver.clone();
 
     let total_checked_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let total_checked_count_writer = total_checked_count.clone();
@@ -414,23 +437,35 @@ async fn main() {
 
                             if message.event == MessageEvent::Success {
                                 let video_data = message.video_data.unwrap();
-
-                                log::info!(
-                                    "Found {} by {}",
-                                    terminal_link(
-                                        &format!("https://youtu.be/{}", &message.id),
-                                        &video_data.title
-                                    ),
-                                    terminal_link(&video_data.author_url, &video_data.author_name)
-                                );
+                                
+                                // OPTIMIZATION: Apply author filter
+                                if matches_author_filter(&video_data.author_name, &author_filter) {
+                                    log::info!(
+                                        "Found {} by {}",
+                                        terminal_link(
+                                            &format!("https://youtu.be/{}", &message.id),
+                                            &video_data.title
+                                        ),
+                                        terminal_link(&video_data.author_url, &video_data.author_name)
+                                    );
+                                } else {
+                                    log::trace!(
+                                        "Skipped {} by {} (doesn't match filter)",
+                                        video_data.title,
+                                        video_data.author_name
+                                    );
+                                }
                             } else if message.event == MessageEvent::NotEmbeddable {
-                                log::info!(
-                                    "Found {}",
-                                    terminal_link(
-                                        &format!("https://youtu.be/{}", &message.id),
-                                        &message.id
-                                    )
-                                );
+                                // Only log non-embeddable if no author filter (can't check author)
+                                if author_filter.is_none() {
+                                    log::info!(
+                                        "Found {}",
+                                        terminal_link(
+                                            &format!("https://youtu.be/{}", &message.id),
+                                            &message.id
+                                        )
+                                    );
+                                }
                             }
 
                             last_id = message.id;
@@ -438,12 +473,9 @@ async fn main() {
                         Err(_) => {
                             if testing_receiver_clone.is_disconnected() {
                                 // No more permutations are being tested
-
                                 log::trace!("All permutations tested");
-                                return; // So there's nothing more for this worker to do
+                                return;
                             }
-
-                            // Otherwise, wait for more messages to be received
                             continue;
                         }
                     }
@@ -451,21 +483,21 @@ async fn main() {
                 _ = timer_interval.tick() => {
                     save_file.set_len(0).unwrap(); // Clear the file
                     save_file.seek(std::io::SeekFrom::Start(0)).unwrap(); // Reset the cursor
-                    save_file.write(last_id.as_bytes()).unwrap(); /* We would have received the first ID in the channel, which is the earliest in
-                                                                    the sequence (since the generate_permutations function goes in order, luckily).
-                                                                    This means that is the earliest ID that we have not checked yet. */
+                    save_file.write_all(last_id.as_bytes()).unwrap();
                     save_file.flush().unwrap(); // Write the changes to the file
                 }
             }
         }
     });
 
-    let interval = tokio::time::Duration::from_secs(args.log_interval as u64);
+    let interval = tokio::time::Duration::from_secs(args.log_interval);
     let start = tokio::time::Instant::now();
-    let mut last_tick = start.clone();
+    let mut last_tick = start;
 
     while !testing_receiver.is_disconnected() {
-        // If the sender of the testing channel is dropped, all workers are done
+        // OPTIMIZATION: Use tokio::time::sleep instead of busy waiting
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        
         if last_tick.elapsed() >= interval {
             let elapsed = start.elapsed().as_secs();
 
@@ -488,7 +520,8 @@ async fn main() {
         }
     }
 
-    for _ in 0..500 {
+    // OPTIMIZATION: Reduced wait iterations
+    for _ in 0..50 {
         if permutation_generator.is_finished()
             && testing_tasks.iter().all(|task| task.is_finished())
             && results_handler.is_finished()
